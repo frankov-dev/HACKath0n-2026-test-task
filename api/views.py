@@ -166,25 +166,26 @@ class RequestViewSet(viewsets.ModelViewSet):
     serializer_class = RequestSerializer
 
     def get_queryset(self):
+        base_queryset = Request.objects.select_related('point').all()
         user = self.request.user
         profile = get_user_profile_or_none(user)
 
         if user.is_superuser:
-            return self.queryset
+            return base_queryset
 
         if profile is None:
             return Request.objects.none()
 
         if profile.role == EmployeeProfile.Role.DISPATCHER:
-            return self.queryset
+            return base_queryset
 
         if profile.role == EmployeeProfile.Role.DELIVERY_POINT_MANAGER:
             if profile.delivery_point_id is None:
                 return Request.objects.none()
-            return self.queryset.filter(point_id=profile.delivery_point_id)
+            return base_queryset.filter(point_id=profile.delivery_point_id)
 
         if profile.role == EmployeeProfile.Role.WAREHOUSE_MANAGER:
-            return self.queryset
+            return base_queryset
 
         return Request.objects.none()
 

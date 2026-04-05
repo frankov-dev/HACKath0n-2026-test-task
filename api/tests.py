@@ -15,6 +15,7 @@ from .models import (
 	TransactionType,
 	ResourceTransaction,
 	Stock,
+	Supplier,
 	Warehouse,
 )
 from .services import LogisticsService
@@ -320,3 +321,197 @@ class AuthAndRBACApiTests(APITestCase):
 		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 		created = Request.objects.get(id=response.data['id'])
 		self.assertEqual(created.point_id, self.point_kyiv.id)
+
+
+class ApiCoverageAndRedistributionTests(APITestCase):
+	def setUp(self):
+		self.supplier = Supplier.objects.create(
+			name='Постачальник Київ',
+			city='Київ',
+			latitude=50.45,
+			longitude=30.52,
+		)
+		self.warehouse_kyiv = Warehouse.objects.create(
+			name='Склад Київ',
+			city='Київ',
+			latitude=50.45,
+			longitude=30.52,
+			supplier=self.supplier,
+		)
+		self.warehouse_lviv = Warehouse.objects.create(
+			name='Склад Львів',
+			city='Львів',
+			latitude=49.84,
+			longitude=24.03,
+			supplier=self.supplier,
+		)
+
+		Stock.objects.create(
+			warehouse=self.warehouse_kyiv,
+			resource_type=ResourceType.FUEL,
+			actual_quantity=100,
+			reserved_quantity=0,
+		)
+		Stock.objects.create(
+			warehouse=self.warehouse_kyiv,
+			resource_type=ResourceType.SUPPLIES,
+			actual_quantity=9,
+			reserved_quantity=0,
+		)
+
+		self.point_kyiv = DeliveryPoint.objects.create(
+			name='Точка Київ',
+			city='Київ',
+			latitude=50.40,
+			longitude=30.60,
+		)
+		self.point_lviv = DeliveryPoint.objects.create(
+			name='Точка Львів',
+			city='Львів',
+			latitude=49.83,
+			longitude=24.01,
+		)
+
+		self.dispatcher = User.objects.create_user(username='dispatcher_cov', password='Dispatcher123!')
+		EmployeeProfile.objects.create(user=self.dispatcher, role=EmployeeProfile.Role.DISPATCHER)
+
+		self.point_manager = User.objects.create_user(username='point_cov', password='PointManager123!')
+		EmployeeProfile.objects.create(
+			user=self.point_manager,
+			role=EmployeeProfile.Role.DELIVERY_POINT_MANAGER,
+			delivery_point=self.point_kyiv,
+		)
+
+		self.warehouse_manager = User.objects.create_user(username='warehouse_cov', password='WarehouseManager123!')
+		EmployeeProfile.objects.create(
+			user=self.warehouse_manager,
+			role=EmployeeProfile.Role.WAREHOUSE_MANAGER,
+			warehouse=self.warehouse_kyiv,
+		)
+
+		self.req_kyiv = Request.objects.create(
+			point=self.point_kyiv,
+			resource_type=ResourceType.FUEL,
+			quantity_requested=10,
+			priority=PriorityLevel.NORMAL,
+		)
+		self.req_lviv = Request.objects.create(
+			point=self.point_lviv,
+			resource_type=ResourceType.FUEL,
+			quantity_requested=10,
+			priority=PriorityLevel.NORMAL,
+		)
+		LogisticsService.recalculate_resource(ResourceType.FUEL)
+
+	def _login_and_set_token(self, username, password):
+		response = self.client.post(
+			reverse('auth-login'),
+			{'username': username, 'password': password},
+			format='json',
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		token = response.data['token']
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {token}')
+		return token
+
+	def test_all_roles_can_login_and_access_all_main_api_endpoints(self):
+		roles = [
+			('dispatcher_cov', 'Dispatcher123!', 2),
+			('point_cov', 'PointManager123!', 1),
+			('warehouse_cov', 'WarehouseManager123!', 2),
+		]
+
+		for username, password, expected_requests_count in roles:
+			with self.subTest(username=username):
+				self._login_and_set_token(username, password)
+
+				me_response = self.client.get(reverse('auth-me'))
+				self.assertEqual(me_response.status_code, status.HTTP_200_OK)
+
+				self.assertEqual(self.client.get(reverse('warehouse-list')).status_code, status.HTTP_200_OK)
+				self.assertEqual(self.client.get(reverse('warehouse-detail', args=[self.warehouse_kyiv.id])).status_code, status.HTTP_200_OK)
+				self.assertEqual(self.client.get(reverse('supplier-list')).status_code, status.HTTP_200_OK)
+				self.assertEqual(self.client.get(reverse('point-list')).status_code, status.HTTP_200_OK)
+
+				nearest_response = self.client.get(
+					reverse('warehouse-nearest'),
+					{
+						'resource_type': ResourceType.FUEL,
+						'latitude': 50.40,
+						'longitude': 30.60,
+						'limit': 5,
+					},
+				)
+				self.assertEqual(nearest_response.status_code, status.HTTP_200_OK)
+
+				requests_response = self.client.get(reverse('request-list'))
+				self.assertEqual(requests_response.status_code, status.HTTP_200_OK)
+				self.assertEqual(len(requests_response.data), expected_requests_count)
+
+				transactions_response = self.client.get(reverse('transaction-list'))
+				self.assertEqual(transactions_response.status_code, status.HTTP_200_OK)
+
+				schema_response = self.client.get(reverse('schema'))
+				self.assertEqual(schema_response.status_code, status.HTTP_200_OK)
+
+				docs_response = self.client.get(reverse('swagger-ui'))
+				self.assertEqual(docs_response.status_code, status.HTTP_200_OK)
+
+				self.client.credentials()
+
+	def test_critical_request_redistribution_logic(self):
+		normal_request_1 = Request.objects.create(
+			point=self.point_kyiv,
+			resource_type=ResourceType.SUPPLIES,
+			quantity_requested=3,
+			priority=PriorityLevel.NORMAL,
+		)
+		LogisticsService.process_request(normal_request_1)
+
+		normal_request_2 = Request.objects.create(
+			point=self.point_kyiv,
+			resource_type=ResourceType.SUPPLIES,
+			quantity_requested=3,
+			priority=PriorityLevel.NORMAL,
+		)
+		LogisticsService.process_request(normal_request_2)
+
+		normal_request_3 = Request.objects.create(
+			point=self.point_kyiv,
+			resource_type=ResourceType.SUPPLIES,
+			quantity_requested=3,
+			priority=PriorityLevel.NORMAL,
+		)
+		LogisticsService.process_request(normal_request_3)
+
+		critical_request = Request.objects.create(
+			point=self.point_lviv,
+			resource_type=ResourceType.SUPPLIES,
+			quantity_requested=7,
+			priority=PriorityLevel.CRITICAL,
+		)
+		LogisticsService.process_request(critical_request)
+
+		critical_request.refresh_from_db()
+		normal_request_1.refresh_from_db()
+		normal_request_2.refresh_from_db()
+		normal_request_3.refresh_from_db()
+
+		self.assertEqual(critical_request.quantity_allocated, 7)
+		self.assertEqual(critical_request.status, RequestStatus.ALLOCATED)
+		self.assertEqual(normal_request_1.quantity_allocated, 0)
+		self.assertEqual(normal_request_2.quantity_allocated, 0)
+		self.assertEqual(normal_request_3.quantity_allocated, 2)
+
+		self.assertTrue(
+			ResourceTransaction.objects.filter(
+				request=critical_request,
+				transaction_type=TransactionType.PREEMPT_IN,
+			).exists()
+		)
+		self.assertTrue(
+			ResourceTransaction.objects.filter(
+				request__in=[normal_request_1, normal_request_2, normal_request_3],
+				transaction_type=TransactionType.PREEMPT_OUT,
+			).exists()
+		)
