@@ -112,8 +112,7 @@ class LogoutView(APIView):
     @extend_schema(responses={200: LogoutResponseSerializer})
     def post(self, request):
         if request.user.is_authenticated:
-            if request.auth is not None and hasattr(request.auth, 'delete'):
-                request.auth.delete()
+            Token.objects.filter(user=request.user).delete()
             logout(request)
         return Response({'detail': 'Вихід виконано'})
 
