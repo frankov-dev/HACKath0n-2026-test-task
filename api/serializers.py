@@ -106,3 +106,22 @@ class MeResponseSerializer(serializers.Serializer):
     role = serializers.CharField(allow_null=True)
     delivery_point_id = serializers.IntegerField(allow_null=True)
     warehouse_id = serializers.IntegerField(allow_null=True)
+
+
+class ApiCommandSerializer(serializers.Serializer):
+    label = serializers.CharField()
+    method = serializers.CharField()
+    path = serializers.CharField()
+    description = serializers.CharField()
+    auth_required = serializers.BooleanField()
+
+
+class ApiRootResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    authenticated = serializers.BooleanField()
+    user = AuthUserSerializer(allow_null=True)
+    commands = ApiCommandSerializer(many=True)
+
+
+class LogoutResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()

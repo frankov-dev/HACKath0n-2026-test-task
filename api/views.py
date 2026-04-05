@@ -1,5 +1,6 @@
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, logout
 from rest_framework import permissions, status, viewsets
+from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -21,6 +22,8 @@ from .serializers import (
     DeliveryPointSerializer,
     LoginRequestSerializer,
     LoginResponseSerializer,
+    ApiRootResponseSerializer,
+    LogoutResponseSerializer,
     MeResponseSerializer,
     RequestSerializer,
     ResourceTransactionSerializer,
@@ -29,6 +32,90 @@ from .serializers import (
 )
 from .services import LogisticsService
 from .utils import calculate_distance
+
+
+def _command(label, method, path, description, auth_required=True):
+    return {
+        'label': label,
+        'method': method,
+        'path': path,
+        'description': description,
+        'auth_required': auth_required,
+    }
+
+
+class ApiRootView(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [AllowAny]
+    serializer_class = ApiRootResponseSerializer
+
+    @extend_schema(responses={200: ApiRootResponseSerializer})
+    def get(self, request):
+        profile = getattr(request.user, 'employee_profile', None) if request.user.is_authenticated else None
+
+        commands = [
+            _command('login', 'POST', '/api/auth/login/', 'Отримати token для API', False),
+            _command('logout', 'POST', '/api/auth/logout/', 'Вийти з сесії або видалити token', False),
+            _command('me', 'GET', '/api/auth/me/', 'Поточний користувач', True),
+            _command('docs', 'GET', '/api/docs/', 'Swagger UI', True),
+            _command('schema', 'GET', '/api/schema/', 'OpenAPI schema', True),
+        ]
+
+        if profile is None:
+            commands.extend([
+                _command('warehouses', 'GET', '/api/warehouses/', 'Склади', True),
+                _command('suppliers', 'GET', '/api/suppliers/', 'Постачальники', True),
+                _command('points', 'GET', '/api/points/', 'Точки доставки', True),
+                _command('transactions', 'GET', '/api/transactions/', 'Транзакції', True),
+                _command('requests', 'GET', '/api/requests/', 'Заявки', True),
+            ])
+        elif profile.role == EmployeeProfile.Role.DELIVERY_POINT_MANAGER:
+            commands.extend([
+                _command('points', 'GET', '/api/points/', 'Ваша точка доставки', True),
+                _command('requests', 'GET/POST', '/api/requests/', 'Ваші заявки', True),
+            ])
+        elif profile.role == EmployeeProfile.Role.WAREHOUSE_MANAGER:
+            commands.extend([
+                _command('warehouses', 'GET', '/api/warehouses/', 'Ваш склад', True),
+                _command('suppliers', 'GET', '/api/suppliers/', 'Пов’язані постачальники', True),
+                _command('requests', 'GET', '/api/requests/', 'Заявки', True),
+            ])
+        else:
+            commands.extend([
+                _command('warehouses', 'GET', '/api/warehouses/', 'Склади', True),
+                _command('suppliers', 'GET', '/api/suppliers/', 'Постачальники', True),
+                _command('points', 'GET', '/api/points/', 'Точки доставки', True),
+                _command('transactions', 'GET', '/api/transactions/', 'Транзакції', True),
+                _command('requests', 'GET', '/api/requests/', 'Заявки', True),
+            ])
+
+        return Response(
+            {
+                'message': 'API root for development',
+                'authenticated': request.user.is_authenticated,
+                'user': None if profile is None else {
+                    'username': request.user.username,
+                    'role': profile.role,
+                    'delivery_point_id': profile.delivery_point_id,
+                    'warehouse_id': profile.warehouse_id,
+                },
+                'commands': commands,
+            }
+        )
+
+
+class LogoutView(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [AllowAny]
+    serializer_class = LogoutResponseSerializer
+
+    @extend_schema(responses={200: LogoutResponseSerializer})
+    def post(self, request):
+        if request.user.is_authenticated:
+            if request.auth is not None and hasattr(request.auth, 'delete'):
+                request.auth.delete()
+            logout(request)
+        return Response({'detail': 'Вихід виконано'})
 
 
 class LoginView(APIView):

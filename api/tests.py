@@ -294,6 +294,18 @@ class AuthAndRBACApiTests(APITestCase):
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertIn('token', response.data)
 
+	def test_api_root_is_public_and_lists_commands(self):
+		response = self.client.get(reverse('api-home'))
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertIn('commands', response.data)
+		self.assertTrue(any(command['label'] == 'login' for command in response.data['commands']))
+
+	def test_logout_clears_session(self):
+		self.assertTrue(self.client.login(username='dispatcher_test', password='Dispatcher123!'))
+		response = self.client.post(reverse('auth-logout'))
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertFalse('_auth_user_id' in self.client.session)
+
 	def test_requests_endpoint_requires_token(self):
 		response = self.client.get(reverse('request-list'))
 		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

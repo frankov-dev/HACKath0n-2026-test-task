@@ -16,8 +16,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from api.dev_views import dev_portal
 
 urlpatterns = [
+    path('', dev_portal, name='dev-portal'),
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),  # Підключаємо URL-адреси з нашого додатку api
 ]
