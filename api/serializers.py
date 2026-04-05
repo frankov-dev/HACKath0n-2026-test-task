@@ -34,6 +34,8 @@ class RequestSerializer(serializers.ModelSerializer):
             'is_urgent', 'status', 'status_display', 'created_at'
         ]
 
+        read_only_fields = ['quantity_allocated', 'status', 'created_at']
+
 class DeliveryPointSerializer(serializers.ModelSerializer):
     """Відображення точки доставки (магазину) та її запитів."""
     requests = RequestSerializer(many=True, read_only=True)
