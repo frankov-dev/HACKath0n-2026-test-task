@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY . /app
 
-RUN sed -i 's/\r$//' /app/docker/backend-entrypoint.sh && chmod +x /app/docker/backend-entrypoint.sh
+RUN chmod +x /app/docker/backend-entrypoint.sh
 
 EXPOSE 8000
 
