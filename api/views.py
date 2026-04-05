@@ -9,6 +9,14 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 
 from .models import DeliveryPoint, EmployeeProfile, Request, ResourceTransaction, Stock, Supplier, Warehouse
+from .permissions import RequestWritePermission
+from .query_services import (
+    delivery_points_queryset_for_user,
+    requests_queryset_for_user,
+    suppliers_queryset_for_user,
+    transactions_queryset_for_user,
+    warehouses_queryset_for_user,
+)
 from .serializers import (
     DeliveryPointSerializer,
     LoginRequestSerializer,
@@ -86,20 +94,7 @@ class WarehouseViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = WarehouseSerializer
 
     def get_queryset(self):
-        user = self.request.user
-        profile = get_user_profile_or_none(user)
-
-        if user.is_superuser:
-            return Warehouse.objects.all()
-        if profile is None:
-            return Warehouse.objects.none()
-        if profile.role == EmployeeProfile.Role.DISPATCHER:
-            return Warehouse.objects.all()
-        if profile.role == EmployeeProfile.Role.WAREHOUSE_MANAGER:
-            if profile.warehouse_id is None:
-                return Warehouse.objects.none()
-            return Warehouse.objects.filter(id=profile.warehouse_id)
-        return Warehouse.objects.none()
+        return warehouses_queryset_for_user(self.request.user, Warehouse.objects.all())
 
     @action(detail=False, methods=['get'], url_path='nearest')
     def nearest(self, request):
@@ -156,18 +151,7 @@ class SupplierViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = SupplierSerializer
 
     def get_queryset(self):
-        user = self.request.user
-        profile = get_user_profile_or_none(user)
-
-        if user.is_superuser:
-            return Supplier.objects.all()
-        if profile is None:
-            return Supplier.objects.none()
-        if profile.role == EmployeeProfile.Role.DISPATCHER:
-            return Supplier.objects.all()
-        if profile.role == EmployeeProfile.Role.WAREHOUSE_MANAGER and profile.warehouse_id is not None:
-            return Supplier.objects.filter(warehouses__id=profile.warehouse_id).distinct()
-        return Supplier.objects.none()
+        return suppliers_queryset_for_user(self.request.user, Supplier.objects.all())
 
 
 class ResourceTransactionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -175,7 +159,7 @@ class ResourceTransactionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ResourceTransactionSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = transactions_queryset_for_user(self.request.user, super().get_queryset())
         resource_type = self.request.query_params.get('resource_type')
         request_id = self.request.query_params.get('request')
         transaction_type = self.request.query_params.get('transaction_type')
@@ -198,20 +182,7 @@ class DeliveryPointViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DeliveryPointSerializer
 
     def get_queryset(self):
-        user = self.request.user
-        profile = get_user_profile_or_none(user)
-
-        if user.is_superuser:
-            return DeliveryPoint.objects.all()
-        if profile is None:
-            return DeliveryPoint.objects.none()
-        if profile.role == EmployeeProfile.Role.DISPATCHER:
-            return DeliveryPoint.objects.all()
-        if profile.role == EmployeeProfile.Role.DELIVERY_POINT_MANAGER:
-            if profile.delivery_point_id is None:
-                return DeliveryPoint.objects.none()
-            return DeliveryPoint.objects.filter(id=profile.delivery_point_id)
-        return DeliveryPoint.objects.none()
+        return delivery_points_queryset_for_user(self.request.user, DeliveryPoint.objects.all())
 
 # БЛОК ОПЕРАЦІЙ (Створення та перегляд заявок)
 class RequestViewSet(viewsets.ModelViewSet):
@@ -222,30 +193,10 @@ class RequestViewSet(viewsets.ModelViewSet):
     """
     queryset = Request.objects.select_related('point').all()
     serializer_class = RequestSerializer
+    permission_classes = [permissions.IsAuthenticated, RequestWritePermission]
 
     def get_queryset(self):
-        base_queryset = Request.objects.select_related('point').all()
-        user = self.request.user
-        profile = get_user_profile_or_none(user)
-
-        if user.is_superuser:
-            return base_queryset
-
-        if profile is None:
-            return Request.objects.none()
-
-        if profile.role == EmployeeProfile.Role.DISPATCHER:
-            return base_queryset
-
-        if profile.role == EmployeeProfile.Role.DELIVERY_POINT_MANAGER:
-            if profile.delivery_point_id is None:
-                return Request.objects.none()
-            return base_queryset.filter(point_id=profile.delivery_point_id)
-
-        if profile.role == EmployeeProfile.Role.WAREHOUSE_MANAGER:
-            return base_queryset
-
-        return Request.objects.none()
+        return requests_queryset_for_user(self.request.user)
 
     def perform_create(self, serializer):
         profile = get_user_profile_or_none(self.request.user)

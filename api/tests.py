@@ -19,6 +19,7 @@ from .models import (
 	Warehouse,
 )
 from .services import LogisticsService
+from .test_factories import ApiFactory
 
 
 class LogisticsServiceTests(TestCase):
@@ -235,25 +236,15 @@ class LogisticsServiceTests(TestCase):
 
 class AuthAndRBACApiTests(APITestCase):
 	def setUp(self):
-		self.point_kyiv = DeliveryPoint.objects.create(
-			name='АЗС Київ',
-			city='Київ',
-			latitude=50.45,
-			longitude=30.52,
-		)
-		self.point_lviv = DeliveryPoint.objects.create(
+		self.point_kyiv = ApiFactory.create_point(name='АЗС Київ')
+		self.point_lviv = ApiFactory.create_point(
 			name='АЗС Львів',
 			city='Львів',
 			latitude=49.84,
 			longitude=24.03,
 		)
 
-		warehouse = Warehouse.objects.create(
-			name='Київський хаб',
-			city='Київ',
-			latitude=50.45,
-			longitude=30.52,
-		)
+		warehouse = ApiFactory.create_warehouse(name='Київський хаб')
 		Stock.objects.create(
 			warehouse=warehouse,
 			resource_type=ResourceType.FUEL,
@@ -261,23 +252,33 @@ class AuthAndRBACApiTests(APITestCase):
 			reserved_quantity=0,
 		)
 
-		self.dispatcher = User.objects.create_user(username='dispatcher_test', password='Dispatcher123!')
-		EmployeeProfile.objects.create(user=self.dispatcher, role=EmployeeProfile.Role.DISPATCHER)
+		self.dispatcher = ApiFactory.create_user_with_role(
+			username='dispatcher_test',
+			password='Dispatcher123!',
+			role=EmployeeProfile.Role.DISPATCHER,
+		)
 
-		self.point_manager = User.objects.create_user(username='point_manager_test', password='PointManager123!')
-		EmployeeProfile.objects.create(
-			user=self.point_manager,
+		self.point_manager = ApiFactory.create_user_with_role(
+			username='point_manager_test',
+			password='PointManager123!',
 			role=EmployeeProfile.Role.DELIVERY_POINT_MANAGER,
 			delivery_point=self.point_kyiv,
 		)
 
-		self.req_kyiv = Request.objects.create(
+		self.warehouse_manager = ApiFactory.create_user_with_role(
+			username='warehouse_manager_test',
+			password='WarehouseManager123!',
+			role=EmployeeProfile.Role.WAREHOUSE_MANAGER,
+			warehouse=warehouse,
+		)
+
+		self.req_kyiv = ApiFactory.create_request(
 			point=self.point_kyiv,
 			resource_type=ResourceType.FUEL,
 			quantity_requested=10,
 			priority=PriorityLevel.NORMAL,
 		)
-		self.req_lviv = Request.objects.create(
+		self.req_lviv = ApiFactory.create_request(
 			point=self.point_lviv,
 			resource_type=ResourceType.FUEL,
 			quantity_requested=10,
@@ -322,6 +323,22 @@ class AuthAndRBACApiTests(APITestCase):
 		created = Request.objects.get(id=response.data['id'])
 		self.assertEqual(created.point_id, self.point_kyiv.id)
 
+	def test_warehouse_manager_cannot_create_request(self):
+		self.client.force_authenticate(user=self.warehouse_manager)
+		response = self.client.post(
+			reverse('request-list'),
+			{
+				'point': self.point_kyiv.id,
+				'resource_type': ResourceType.FUEL,
+				'quantity_requested': 5,
+				'priority': PriorityLevel.NORMAL,
+				'is_urgent': False,
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
 
 class ApiCoverageAndRedistributionTests(APITestCase):
 	def setUp(self):
@@ -359,43 +376,45 @@ class ApiCoverageAndRedistributionTests(APITestCase):
 			reserved_quantity=0,
 		)
 
-		self.point_kyiv = DeliveryPoint.objects.create(
+		self.point_kyiv = ApiFactory.create_point(
 			name='Точка Київ',
-			city='Київ',
 			latitude=50.40,
 			longitude=30.60,
 		)
-		self.point_lviv = DeliveryPoint.objects.create(
+		self.point_lviv = ApiFactory.create_point(
 			name='Точка Львів',
 			city='Львів',
 			latitude=49.83,
 			longitude=24.01,
 		)
 
-		self.dispatcher = User.objects.create_user(username='dispatcher_cov', password='Dispatcher123!')
-		EmployeeProfile.objects.create(user=self.dispatcher, role=EmployeeProfile.Role.DISPATCHER)
+		self.dispatcher = ApiFactory.create_user_with_role(
+			username='dispatcher_cov',
+			password='Dispatcher123!',
+			role=EmployeeProfile.Role.DISPATCHER,
+		)
 
-		self.point_manager = User.objects.create_user(username='point_cov', password='PointManager123!')
-		EmployeeProfile.objects.create(
-			user=self.point_manager,
+		self.point_manager = ApiFactory.create_user_with_role(
+			username='point_cov',
+			password='PointManager123!',
 			role=EmployeeProfile.Role.DELIVERY_POINT_MANAGER,
 			delivery_point=self.point_kyiv,
 		)
 
-		self.warehouse_manager = User.objects.create_user(username='warehouse_cov', password='WarehouseManager123!')
-		EmployeeProfile.objects.create(
-			user=self.warehouse_manager,
+		self.warehouse_manager = ApiFactory.create_user_with_role(
+			username='warehouse_cov',
+			password='WarehouseManager123!',
 			role=EmployeeProfile.Role.WAREHOUSE_MANAGER,
 			warehouse=self.warehouse_kyiv,
 		)
 
-		self.req_kyiv = Request.objects.create(
+		self.req_kyiv = ApiFactory.create_request(
 			point=self.point_kyiv,
 			resource_type=ResourceType.FUEL,
 			quantity_requested=10,
 			priority=PriorityLevel.NORMAL,
 		)
-		self.req_lviv = Request.objects.create(
+		self.req_lviv = ApiFactory.create_request(
 			point=self.point_lviv,
 			resource_type=ResourceType.FUEL,
 			quantity_requested=10,
