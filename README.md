@@ -1,46 +1,39 @@
 # Logistics Hub API + Frontend
 
-Тестове завдання для відбору на хакатон: система розподілу ресурсів між складами та точками доставки.
+Проєкт Logistics Hub реалізує прикладну систему розподілу ресурсів між складами та точками доставки. Робота виконана в межах тестового завдання для відбору на хакатон.
 
-## Що робить проєкт
+## 1. Призначення системи
 
-Система дозволяє:
-- створювати та обробляти заявки на ресурси (`FUEL`, `GOODS`, `SUPPLIES`);
-- автоматично розподіляти ресурси зі складів за пріоритетом і терміновістю;
-- виконувати перерозподіл на користь критичних заявок;
-- вести журнал транзакцій (`ALLOCATION`, `PREEMPT_OUT`, `PREEMPT_IN`, `SHORTAGE`);
-- обмежувати доступ до даних за ролями (RBAC).
+Система забезпечує:
+- прийом і обробку заявок на ресурси (`FUEL`, `GOODS`, `SUPPLIES`);
+- автоматизований розподіл ресурсів зі складів з урахуванням пріоритету та терміновості;
+- перерозподіл на користь критичних заявок у разі дефіциту;
+- ведення журналу транзакцій (`ALLOCATION`, `PREEMPT_OUT`, `PREEMPT_IN`, `SHORTAGE`);
+- рольову модель доступу (RBAC) та ізоляцію даних між користувачами.
 
-## Технологічний стек
+## 2. Технологічний стек
 
 Backend:
-- Python, Django 6, Django REST Framework
-- Token Authentication (`rest_framework.authtoken`)
-- drf-spectacular (OpenAPI / Swagger)
-- SQLite
+- Python, Django 6, Django REST Framework;
+- Token Authentication (`rest_framework.authtoken`);
+- drf-spectacular (OpenAPI / Swagger);
+- SQLite.
 
 Frontend:
-- React 19 + Vite
-- Tailwind CSS
+- React 19 + Vite;
+- Tailwind CSS.
 
-## Структура проєкту
+## 3. Структура репозиторію
 
-- `core/` - Django налаштування та головні URL
-- `api/` - моделі, серіалізатори, в'юхи, бізнес-логіка, тести
-- `frontend/` - React клієнт
-- `seed_db.py` - наповнення БД демо-даними
-- `db.sqlite3` - локальна база даних
+- `core/` - конфігурація Django та головна маршрутизація;
+- `api/` - доменні моделі, API-шар, сервіси, тести;
+- `frontend/` - клієнтський інтерфейс;
+- `seed_db.py` - скрипт підготовки демо-даних;
+- `db.sqlite3` - локальна база даних.
 
-## Швидкий запуск (локально)
+## 4. Запуск проєкту
 
-### 1. Backend
-
-1. Перейти в корінь проєкту.
-2. Створити та активувати віртуальне оточення.
-3. Встановити залежності.
-4. Виконати міграції.
-5. Заповнити демо-дані.
-6. Запустити сервер.
+### 4.1 Backend
 
 Windows (PowerShell):
 
@@ -53,13 +46,11 @@ python seed_db.py
 python manage.py runserver
 ```
 
-Backend буде доступний на:
-- `http://127.0.0.1:8000/`
-- API root: `http://127.0.0.1:8000/api/`
+Сервіс буде доступний за адресою:
+- `http://127.0.0.1:8000/`;
+- API префікс: `http://127.0.0.1:8000/api/`.
 
-### 2. Frontend
-
-У новому терміналі:
+### 4.2 Frontend
 
 ```powershell
 cd frontend
@@ -67,20 +58,19 @@ npm install
 npm run dev
 ```
 
-Frontend за замовчуванням стартує на:
-- `http://127.0.0.1:5173/`
+Клієнтський застосунок за замовчуванням доступний за адресою:
+- `http://127.0.0.1:5173/`.
 
-## Демо-користувачі
+## 5. Демо-облікові записи
 
-Після `python seed_db.py` доступні акаунти:
+Після виконання `python seed_db.py` створюються тестові користувачі:
+- Dispatcher: `dispatcher_admin` / `Dispatcher123!`;
+- Delivery Point Manager: `manager_kyiv_point` / `PointManager123!`;
+- Warehouse Manager: `manager_lviv_warehouse` / `WarehouseManager123!`.
 
-- Dispatcher: `dispatcher_admin` / `Dispatcher123!`
-- Delivery point manager: `manager_kyiv_point` / `PointManager123!`
-- Warehouse manager: `manager_lviv_warehouse` / `WarehouseManager123!`
+## 6. Авторизація
 
-## Авторизація
-
-### Login
+### 6.1 Вхід у систему
 
 `POST /api/auth/login/`
 
@@ -108,124 +98,114 @@ Response:
 }
 ```
 
-Для захищених ендпоінтів передавайте заголовок:
+Для доступу до захищених ендпоінтів необхідно передавати:
 
 ```http
 Authorization: Token <token>
 ```
 
-## Ролі та доступ (RBAC)
+### 6.2 Режим доступу до службових маршрутів API
 
-### DISPATCHER
+- `GET /api/` (API Root) є публічним і доступний без авторизації; маршрут виконує роль навігаційної точки та повертає перелік команд.
+- `GET /api/docs/` (Swagger UI) доступний лише для авторизованих користувачів.
+- `GET /api/schema/` (OpenAPI schema) доступний лише для авторизованих користувачів.
+
+Таким чином, публічним є лише вхідний API Root, а документація та схема захищені механізмами автентифікації.
+
+## 7. Ролі та права доступу (RBAC)
+
+### 7.1 DISPATCHER
 - повний доступ до заявок;
-- бачить всі склади, точки, постачальників, транзакції.
+- перегляд усіх складів, точок, постачальників і транзакцій.
 
-### DELIVERY_POINT_MANAGER
-- бачить тільки власну точку та заявки своєї точки;
-- може створювати/редагувати/видаляти заявки;
-- `point` при створенні/оновленні заявки примусово прив'язується до його точки.
+### 7.2 DELIVERY_POINT_MANAGER
+- перегляд лише власної точки та пов'язаних заявок;
+- створення, редагування та видалення заявок у межах своєї зони відповідальності;
+- поле `point` під час створення/оновлення заявки примусово прив'язується до точки менеджера.
 
-### WAREHOUSE_MANAGER
-- бачить свій склад та пов'язаних постачальників;
-- бачить список заявок і транзакцій;
-- не має прав на створення/редагування/видалення заявок.
+### 7.3 WAREHOUSE_MANAGER
+- перегляд свого складу та відповідних постачальників;
+- перегляд заявок і транзакцій;
+- відсутність прав на зміну заявок.
 
-## Основні API ендпоінти
+## 8. Основні API ендпоінти
 
-Базовий префікс: `/api/`
+Базовий префікс: `/api/`.
 
-### Службові
-- `GET /api/` - API root (підказка доступних команд)
-- `GET /api/me/` або `GET /api/auth/me/` - поточний користувач
-- `POST /api/auth/login/` - отримати token
-- `POST /api/auth/logout/` - logout (видаляє token)
+Службові:
+- `GET /api/`;
+- `GET /api/me/` або `GET /api/auth/me/`;
+- `POST /api/auth/login/`;
+- `POST /api/auth/logout/`.
 
-### Каталоги
-- `GET /api/warehouses/`
-- `GET /api/warehouses/{id}/`
-- `GET /api/warehouses/nearest/?resource_type=FUEL&latitude=50.45&longitude=30.52&limit=10`
-- `GET /api/suppliers/`
-- `GET /api/suppliers/{id}/`
-- `GET /api/points/`
-- `GET /api/points/{id}/`
+Каталоги:
+- `GET /api/warehouses/`;
+- `GET /api/warehouses/{id}/`;
+- `GET /api/warehouses/nearest/?resource_type=FUEL&latitude=50.45&longitude=30.52&limit=10`;
+- `GET /api/suppliers/`;
+- `GET /api/suppliers/{id}/`;
+- `GET /api/points/`;
+- `GET /api/points/{id}/`.
 
-### Заявки
-- `GET /api/requests/`
-- `POST /api/requests/`
-- `GET /api/requests/{id}/`
-- `PATCH /api/requests/{id}/`
-- `DELETE /api/requests/{id}/`
+Заявки:
+- `GET /api/requests/`;
+- `POST /api/requests/`;
+- `GET /api/requests/{id}/`;
+- `PATCH /api/requests/{id}/`;
+- `DELETE /api/requests/{id}/`.
 
-### Журнал руху ресурсів
-- `GET /api/transactions/`
-- `GET /api/transactions/{id}/`
+Журнал руху ресурсів:
+- `GET /api/transactions/`;
+- `GET /api/transactions/{id}/`.
 
 Фільтри для `/api/transactions/`:
-- `?resource_type=FUEL|GOODS|SUPPLIES`
-- `?request=<request_id>`
-- `?transaction_type=ALLOCATION|PREEMPT_OUT|PREEMPT_IN|SHORTAGE`
+- `?resource_type=FUEL|GOODS|SUPPLIES`;
+- `?request=<request_id>`;
+- `?transaction_type=ALLOCATION|PREEMPT_OUT|PREEMPT_IN|SHORTAGE`.
 
-### Документація API
-- `GET /api/schema/`
-- `GET /api/docs/`
+Документація:
+- `GET /api/schema/` (authentication required);
+- `GET /api/docs/` (authentication required).
 
-Примітка: `/api/schema/` і `/api/docs/` захищені авторизацією.
+## 9. Ключові доменні моделі
 
-## Ключові моделі домену
+- `Supplier` - постачальник ресурсів;
+- `Warehouse` - складський вузол;
+- `Stock` - залишки ресурсу на складі (`actual_quantity`, `reserved_quantity`, `available_quantity`);
+- `DeliveryPoint` - точка доставки;
+- `EmployeeProfile` - профіль ролі та прив'язка користувача;
+- `Request` - заявка на ресурс;
+- `ResourceTransaction` - журнал руху ресурсу;
+- `AllocationHistory` - історія змін алокації;
+- `Shipment` - модель відправлення.
 
-- `Supplier` - постачальник ресурсу.
-- `Warehouse` - склад (може бути прив'язаний до постачальника).
-- `Stock` - залишки ресурсу на складі (`actual_quantity`, `reserved_quantity`, `available_quantity`).
-- `DeliveryPoint` - точка доставки (магазин/АЗС).
-- `EmployeeProfile` - роль користувача + прив'язка до точки або складу.
-- `Request` - заявка на ресурс (пріоритет, терміновість, статус, виділена кількість).
-- `ResourceTransaction` - журнал операцій розподілу/перерозподілу/нестачі.
-- `AllocationHistory` - історія змін алокації під час перерозподілу.
-- `Shipment` - модель відправлення (підготовлена в домені).
+## 10. Принцип роботи алгоритму розподілу
 
-## Логіка розподілу (коротко)
+Після створення, оновлення або видалення заявки виконується перерахунок для відповідного типу ресурсу:
+1. обнулення резервів для ресурсу;
+2. впорядкування заявок за правилом `is_urgent DESC`, `priority DESC`, `created_at ASC`;
+3. алокація з найближчих складів за географічною дистанцією;
+4. у випадку критичних заявок - перерозподіл з заявок нижчого пріоритету;
+5. при неповному покритті - фіксація `SHORTAGE` транзакції.
 
-При створенні/оновленні/видаленні заявки запускається перерахунок по типу ресурсу:
-1. Скидання резервів для цього ресурсу.
-2. Сортування заявок за правилом: `is_urgent DESC`, `priority DESC`, `created_at ASC`.
-3. Алокація з найближчих складів (за дистанцією).
-4. Для критичних заявок - перерозподіл з lower-priority заявок.
-5. Якщо ресурсу не вистачило - фіксується `SHORTAGE` транзакція.
+## 11. Тестування
 
-## Перевірка якості та демо
-
-### Автоматичний smoke-тест API
+Smoke-перевірка API:
 
 ```powershell
 python manage.py smoke_api
 ```
 
-Що перевіряє команда:
-- логін кожної ролі;
-- доступ до ключових endpoint-ів;
-- рольові обмеження (ізоляція даних);
-- сценарій критичного перерозподілу.
-
-### Запуск unit/API тестів
+Набір unit/API тестів:
 
 ```powershell
 python manage.py test api
 ```
 
-## Типовий сценарій демо (2-3 хв)
+## 12. Додаткові відомості
 
-1. Логін під `dispatcher_admin`.
-2. Показати список заявок, складів та транзакцій.
-3. Створити критичну заявку.
-4. Показати в журналі `PREEMPT_OUT` / `PREEMPT_IN` / `SHORTAGE` (якщо виникне нестача).
-5. Перелогінитись під `manager_kyiv_point` і показати, що видно лише свою точку/заявки.
+- у проєкті реалізовано ізоляцію даних на рівні queryset та permissions;
+- OpenAPI-специфікація генерується автоматично через drf-spectacular;
+- документація API (`/api/docs/`, `/api/schema/`) свідомо захищена авторизацією;
+- параметри `DEBUG=True` і `CORS_ALLOW_ALL_ORIGINS=True` застосовані виключно для локального тестового середовища.
 
-## Важливі зауваження
-
-- Налаштування `CORS_ALLOW_ALL_ORIGINS = True` увімкнене для локальної розробки.
-- `DEBUG=True` та SQLite використані для тестового середовища.
-- Для production потрібно винести секрети в env-змінні і посилити security налаштування.
-
----
-
-Якщо потрібно, можу додати англомовну версію README або окремий блок "Architecture Decision Notes" для технічного інтерв'ю.
