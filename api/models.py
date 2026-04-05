@@ -21,6 +21,13 @@ class RequestStatus(models.TextChoices):
     COMPLETED = 'COMPLETED', 'Доставлено'
     CANCELLED = 'CANCELLED', 'Скасовано'
 
+
+class TransactionType(models.TextChoices):
+    ALLOCATION = 'ALLOCATION', 'Виділення зі складу'
+    PREEMPT_OUT = 'PREEMPT_OUT', 'Списання на перерозподіл'
+    PREEMPT_IN = 'PREEMPT_IN', 'Отримання через перерозподіл'
+    SHORTAGE = 'SHORTAGE', 'Нестача ресурсу'
+
 # --- Base ---
 
 class BaseLocation(models.Model):
@@ -112,3 +119,17 @@ class Shipment(models.Model):
     warehouse = models.ForeignKey(Warehouse, on_delete=models.SET_NULL, null=True)
     estimated_arrival = models.DateTimeField(null=True, blank=True)
     tracking_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
+
+
+class ResourceTransaction(models.Model):
+    request = models.ForeignKey(Request, on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions')
+    resource_type = models.CharField(max_length=20, choices=ResourceType.choices)
+    transaction_type = models.CharField(max_length=20, choices=TransactionType.choices)
+    quantity = models.FloatField(default=0.0, validators=[MinValueValidator(0.0)])
+    from_location = models.CharField(max_length=255, blank=True, default='')
+    to_location = models.CharField(max_length=255, blank=True, default='')
+    note = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']

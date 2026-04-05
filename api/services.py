@@ -1,5 +1,5 @@
 from django.db import transaction
-from .models import AllocationHistory, PriorityLevel, Request, Stock
+from .models import AllocationHistory, PriorityLevel, Request, ResourceTransaction, Stock, TransactionType
 from .utils import calculate_distance
 
 class LogisticsService:
@@ -23,6 +23,18 @@ class LogisticsService:
             # 3. Оновлюємо фінальний статус
             request_instance.update_status()
             request_instance.save()
+
+            shortage_quantity = request_instance.quantity_requested - request_instance.quantity_allocated
+            if shortage_quantity > 0:
+                ResourceTransaction.objects.create(
+                    request=request_instance,
+                    resource_type=request_instance.resource_type,
+                    transaction_type=TransactionType.SHORTAGE,
+                    quantity=shortage_quantity,
+                    from_location='Система розподілу',
+                    to_location=f"Точка: {request_instance.point.name}",
+                    note='Недостатньо ресурсу для повного покриття запиту',
+                )
 
     @staticmethod
     def _allocate_from_free_stocks(req):
@@ -49,6 +61,15 @@ class LogisticsService:
                 stock.reserved_quantity += can_take
                 stock.save()
                 req.quantity_allocated += can_take
+                ResourceTransaction.objects.create(
+                    request=req,
+                    resource_type=req.resource_type,
+                    transaction_type=TransactionType.ALLOCATION,
+                    quantity=can_take,
+                    from_location=f"Склад: {stock.warehouse.name}",
+                    to_location=f"Точка: {req.point.name}",
+                    note=f'Виділено з найближчого доступного складу ({dist:.1f} км)',
+                )
 
     @staticmethod
     def _preempt_low_priority(critical_req):
@@ -80,8 +101,28 @@ class LogisticsService:
             donor.update_status()
             donor.save()
 
+            ResourceTransaction.objects.create(
+                request=donor,
+                resource_type=donor.resource_type,
+                transaction_type=TransactionType.PREEMPT_OUT,
+                quantity=transferred,
+                from_location=f"Точка: {donor.point.name}",
+                to_location=f"Точка: {critical_req.point.name}",
+                note='Списано на користь критичного запиту',
+            )
+
             critical_req.quantity_allocated += transferred
             critical_req.update_status()
+
+            ResourceTransaction.objects.create(
+                request=critical_req,
+                resource_type=critical_req.resource_type,
+                transaction_type=TransactionType.PREEMPT_IN,
+                quantity=transferred,
+                from_location=f"Точка: {donor.point.name}",
+                to_location=f"Точка: {critical_req.point.name}",
+                note='Отримано через перерозподіл від нижчого пріоритету',
+            )
 
             AllocationHistory.objects.create(
                 request=donor,
