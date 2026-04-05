@@ -86,6 +86,14 @@ class Request(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def update_status(self):
+        if self.quantity_allocated >= self.quantity_requested:
+            self.status = 'ALLOCATED'
+        elif self.quantity_allocated > 0:
+            self.status = 'PARTIAL'
+        else:
+            self.status = 'PENDING'
+
     class Meta:
         ordering = ['-priority', '-is_urgent', '-created_at']
 

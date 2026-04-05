@@ -1,6 +1,7 @@
 from rest_framework import viewsets
 from .models import Warehouse, DeliveryPoint, Request
 from .serializers import WarehouseSerializer, DeliveryPointSerializer, RequestSerializer
+from services import LogisticsService
 
 # БЛОК КАТАЛОГУ (Тільки перегляд)
 class WarehouseViewSet(viewsets.ReadOnlyModelViewSet):
@@ -30,5 +31,8 @@ class RequestViewSet(viewsets.ModelViewSet):
     serializer_class = RequestSerializer
 
     def perform_create(self, serializer):
-        # Тут пізніше буде викликатися наша логіка перевірки складу
-        serializer.save()
+        # 1. Зберігаємо запит в базу
+        new_request = serializer.save()
+        
+        # 2. Запускаємо наш "розумний" сервіс
+        LogisticsService.process_request(new_request)
