@@ -82,7 +82,12 @@ docker compose up --build
 docker compose exec backend python seed_db.py
 ```
 
-Або запустити із автоматичним seed під час старту:
+Режим `SEED_DB` у Docker:
+- `auto` (за замовчуванням) - наповнює БД лише якщо вона порожня;
+- `1` - примусово запускає `seed_db.py` при старті контейнера;
+- `0` - не запускає seed автоматично.
+
+Приклад примусового запуску із автоматичним seed під час старту:
 
 ```powershell
 docker compose run -e SEED_DB=1 --service-ports backend

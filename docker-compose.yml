@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: logistics-backend
     environment:
-      SEED_DB: "0"
+      SEED_DB: "auto"
       SQLITE_PATH: /data/db.sqlite3
     ports:
       - "8000:8000"
