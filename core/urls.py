@@ -16,10 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
-from api.views import dashboard_view
 
 urlpatterns = [
-    path('', dashboard_view, name='dashboard'),
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),  # Підключаємо URL-адреси з нашого додатку api
 ]

@@ -16,10 +16,6 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-Root dashboard:
-
-- `/` - web dashboard with 3 panels (warehouse state, transactions, requests flow)
-
 API docs:
 
 - `/api/schema/` - OpenAPI schema
