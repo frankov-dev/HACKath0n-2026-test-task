@@ -18,6 +18,7 @@ router.register(r'requests', RequestViewSet, basename='request')
 
 urlpatterns = [
     path('', ApiRootView.as_view(), name='api-home'),
+    path('me/', MeView.as_view(), name='me-short'),
     path('auth/login/', LoginView.as_view(), name='auth-login'),
     path('auth/logout/', LogoutView.as_view(), name='auth-logout'),
     path('auth/me/', MeView.as_view(), name='auth-me'),

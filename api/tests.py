@@ -309,6 +309,14 @@ class AuthAndRBACApiTests(APITestCase):
 		self.assertFalse('_auth_user_id' in self.client.session)
 		self.assertFalse(Token.objects.filter(user=self.dispatcher).exists())
 
+	def test_logout_via_url_get_clears_session(self):
+		Token.objects.get_or_create(user=self.dispatcher)
+		self.assertTrue(self.client.login(username='dispatcher_test', password='Dispatcher123!'))
+		response = self.client.get(reverse('auth-logout'))
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertFalse('_auth_user_id' in self.client.session)
+		self.assertFalse(Token.objects.filter(user=self.dispatcher).exists())
+
 	def test_requests_endpoint_requires_token(self):
 		response = self.client.get(reverse('request-list'))
 		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

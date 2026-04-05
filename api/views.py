@@ -109,12 +109,19 @@ class LogoutView(APIView):
     permission_classes = [AllowAny]
     serializer_class = LogoutResponseSerializer
 
-    @extend_schema(responses={200: LogoutResponseSerializer})
-    def post(self, request):
+    def _perform_logout(self, request):
         if request.user.is_authenticated:
             Token.objects.filter(user=request.user).delete()
             logout(request)
         return Response({'detail': 'Вихід виконано'})
+
+    @extend_schema(responses={200: LogoutResponseSerializer})
+    def post(self, request):
+        return self._perform_logout(request)
+
+    @extend_schema(responses={200: LogoutResponseSerializer})
+    def get(self, request):
+        return self._perform_logout(request)
 
 
 class LoginView(APIView):
