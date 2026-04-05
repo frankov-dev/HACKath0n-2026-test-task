@@ -16,15 +16,30 @@ const request = async (endpoint, options = {}) => {
   }
   
   if (!response.ok) throw new Error('Помилка запиту');
+  
+  // Якщо це DELETE запит (статус 204 No Content), просто повертаємо успіх
+  if (response.status === 204) return { success: true };
+  
   return response.json();
 };
 
 export const api = {
   login: (username, password) => request('/auth/login/', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  logout: () => request('/auth/logout/', { method: 'POST' }), // Справжній логаут на бекенді
   getMe: () => request('/auth/me/'),
+  
+  // Робота з заявками
   getRequests: () => request('/requests/'),
-  getPoints: () => request('/points/'), // Отримуємо список точок
+  getRequest: (id) => request(`/requests/${id}/`),
   createRequest: (data) => request('/requests/', { method: 'POST', body: JSON.stringify(data) }),
-  getNearestWarehouses: (lat, lng, resourceType) => 
-    request(`/warehouses/nearest/?resource_type=${resourceType}&latitude=${lat}&longitude=${lng}&limit=5`),
+  updateRequest: (id, data) => request(`/requests/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteRequest: (id) => request(`/requests/${id}/`, { method: 'DELETE' }), // Скасування заявки
+  
+  // Інфраструктура та Логи
+  getPoints: () => request('/points/'),
+  getTransactions: () => request('/transactions/'),
+  getTransaction: (id) => request(`/transactions/${id}/`), // Деталі транзакції
+  getWarehouses: () => request('/warehouses/'),
+  getWarehouse: (id) => request(`/warehouses/${id}/`), // Деталі складу
+  getSuppliers: () => request('/suppliers/'),
 };
