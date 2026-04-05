@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 
-from .models import DeliveryPoint, EmployeeProfile, Request, ResourceTransaction, Stock, Supplier, Warehouse
+from .models import DeliveryPoint, EmployeeProfile, Request, RequestStatus, ResourceTransaction, Stock, Supplier, Warehouse
 from .permissions import RequestWritePermission
 from .query_services import (
     delivery_points_queryset_for_user,
@@ -204,7 +204,7 @@ class WarehouseViewSet(viewsets.ReadOnlyModelViewSet):
 
         stocks = (
             Stock.objects.select_related('warehouse')
-            .filter(resource_type=resource_type, actual_quantity__gt=0, warehouse__in=self.get_queryset())
+            .filter(resource_type=resource_type, actual_quantity__gt=0)
         )
 
         items = []
@@ -298,6 +298,9 @@ class RequestViewSet(viewsets.ModelViewSet):
         LogisticsService.recalculate_resource(new_request.resource_type)
 
     def perform_update(self, serializer):
+        if serializer.instance.status not in {RequestStatus.PENDING, RequestStatus.PARTIAL}:
+            raise ValidationError({'detail': 'Не можна змінювати заявку, яка вже обробляється або виконана.'})
+
         profile = get_user_profile_or_none(self.request.user)
         old_resource_type = serializer.instance.resource_type
 
@@ -313,6 +316,9 @@ class RequestViewSet(viewsets.ModelViewSet):
             LogisticsService.recalculate_resource(old_resource_type)
 
     def perform_destroy(self, instance):
+        if instance.status not in {RequestStatus.PENDING, RequestStatus.PARTIAL}:
+            raise ValidationError({'detail': 'Не можна видаляти заявку, яка вже обробляється або виконана.'})
+
         resource_type = instance.resource_type
         instance.delete()
         LogisticsService.recalculate_resource(resource_type)

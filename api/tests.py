@@ -335,6 +335,44 @@ class AuthAndRBACApiTests(APITestCase):
 		created = Request.objects.get(id=response.data['id'])
 		self.assertEqual(created.point_id, self.point_kyiv.id)
 
+	def test_point_manager_can_view_nearest_warehouses(self):
+		self.client.force_authenticate(user=self.point_manager)
+		response = self.client.get(
+			reverse('warehouse-nearest'),
+			{
+				'resource_type': ResourceType.FUEL,
+				'latitude': 50.40,
+				'longitude': 30.60,
+				'limit': 5,
+			},
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertGreaterEqual(len(response.data), 1)
+		self.assertEqual(response.data[0]['warehouse_name'], 'Київський хаб')
+
+	def test_completed_request_cannot_be_updated_or_deleted(self):
+		self.client.force_authenticate(user=self.point_manager)
+		request = ApiFactory.create_request(
+			point=self.point_kyiv,
+			resource_type=ResourceType.GOODS,
+			quantity_requested=4,
+			priority=PriorityLevel.NORMAL,
+		)
+		request.quantity_allocated = 4
+		request.status = RequestStatus.COMPLETED
+		request.save(update_fields=['quantity_allocated', 'status'])
+
+		update_response = self.client.patch(
+			reverse('request-detail', args=[request.id]),
+			{'quantity_requested': 5},
+			format='json',
+		)
+		self.assertEqual(update_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+		delete_response = self.client.delete(reverse('request-detail', args=[request.id]))
+		self.assertEqual(delete_response.status_code, status.HTTP_400_BAD_REQUEST)
+
 	def test_warehouse_manager_cannot_create_request(self):
 		self.client.force_authenticate(user=self.warehouse_manager)
 		response = self.client.post(
