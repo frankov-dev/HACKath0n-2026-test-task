@@ -10,7 +10,6 @@ export default function App() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
-      // Якщо в браузері є токен, пробуємо дістати дані користувача
       api.getMe()
         .then(data => setUser(data))
         .catch(() => localStorage.removeItem('token'))
@@ -20,15 +19,20 @@ export default function App() {
     }
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
+  const handleLogout = async () => {
+    try {
+      await api.logout(); // Інвалідуємо токен на бекенді!
+    } catch (error) {
+      console.error("Помилка при логауті на сервері", error);
+    } finally {
+      localStorage.removeItem('token'); // Видаляємо локально
+      setUser(null);
+    }
   };
 
   if (loading) {
-    return <div className="flex h-screen items-center justify-center bg-gray-100 font-bold text-xl text-blue-600">Завантаження системи...</div>;
+    return <div className="flex h-screen items-center justify-center bg-slate-900 font-bold text-xl text-blue-500">Завантаження системи...</div>;
   }
 
-  // Якщо юзер є — показуємо Дашборд. Якщо ні — сторінку Логіну.
   return user ? <Dashboard user={user} onLogout={handleLogout} /> : <Login onLogin={setUser} />;
 }
