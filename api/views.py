@@ -1,7 +1,7 @@
 from rest_framework import viewsets
 from .models import Warehouse, DeliveryPoint, Request
 from .serializers import WarehouseSerializer, DeliveryPointSerializer, RequestSerializer
-from services import LogisticsService
+from .services import LogisticsService
 
 # БЛОК КАТАЛОГУ (Тільки перегляд)
 class WarehouseViewSet(viewsets.ReadOnlyModelViewSet):
