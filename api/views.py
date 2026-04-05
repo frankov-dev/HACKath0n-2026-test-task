@@ -1,29 +1,34 @@
-from django.shortcuts import render
-
 from rest_framework import viewsets
 from .models import Warehouse, DeliveryPoint, Request
 from .serializers import WarehouseSerializer, DeliveryPointSerializer, RequestSerializer
 
+# БЛОК КАТАЛОГУ (Тільки перегляд)
 class WarehouseViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Показує список складів. 
+    Endpoint: /api/warehouses/
+    Для фронтенду: вивести список складів та залишки на них.
     """
     queryset = Warehouse.objects.all()
     serializer_class = WarehouseSerializer
 
 class DeliveryPointViewSet(viewsets.ReadOnlyModelViewSet):
-    """Показує список магазинів/АЗС."""
+    """
+    Endpoint: /api/points/
+    Для фронтенду: вивести список магазинів/АЗС, щоб вибрати 'себе'.
+    """
     queryset = DeliveryPoint.objects.all()
     serializer_class = DeliveryPointSerializer
 
+# БЛОК ОПЕРАЦІЙ (Створення та перегляд заявок)
 class RequestViewSet(viewsets.ModelViewSet):
     """
-    Створення та перегляд запитів на ресурси.
+    Endpoint: /api/requests/
+    GET: побачити статус усіх заявок (хто що просив і чи отримав).
+    POST: надіслати нову заявку на паливо/товари.
     """
     queryset = Request.objects.all()
     serializer_class = RequestSerializer
 
     def perform_create(self, serializer):
-        # Поки що просто зберігаємо запит.
-        # Коли напишемо services.py, додамо сюди авто-перерахунок.
+        # Тут пізніше буде викликатися наша логіка перевірки складу
         serializer.save()
