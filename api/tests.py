@@ -91,48 +91,59 @@ class LogisticsServiceTests(TestCase):
 		Stock.objects.create(
 			warehouse=self.near_warehouse,
 			resource_type=ResourceType.SUPPLIES,
-			actual_quantity=5,
+			actual_quantity=9,
 			reserved_quantity=0,
 		)
 
-		lower_priority_full = Request.objects.create(
-			point=self.point,
-			resource_type=ResourceType.SUPPLIES,
-			quantity_requested=4,
-			quantity_allocated=4,
-			priority=PriorityLevel.NORMAL,
-			status=RequestStatus.ALLOCATED,
-		)
-		lower_priority_partial = Request.objects.create(
+		normal_request_1 = Request.objects.create(
 			point=self.point,
 			resource_type=ResourceType.SUPPLIES,
 			quantity_requested=3,
-			quantity_allocated=3,
-			priority=PriorityLevel.HIGH,
-			status=RequestStatus.ALLOCATED,
+			priority=PriorityLevel.NORMAL,
 		)
+		LogisticsService.process_request(normal_request_1)
+
+		normal_request_2 = Request.objects.create(
+			point=self.point,
+			resource_type=ResourceType.SUPPLIES,
+			quantity_requested=3,
+			priority=PriorityLevel.NORMAL,
+		)
+		LogisticsService.process_request(normal_request_2)
+
+		normal_request_3 = Request.objects.create(
+			point=self.point,
+			resource_type=ResourceType.SUPPLIES,
+			quantity_requested=3,
+			priority=PriorityLevel.NORMAL,
+		)
+		LogisticsService.process_request(normal_request_3)
+
 		critical_request = Request.objects.create(
 			point=self.point,
 			resource_type=ResourceType.SUPPLIES,
-			quantity_requested=10,
+			quantity_requested=7,
 			priority=PriorityLevel.CRITICAL,
 		)
 
 		LogisticsService.process_request(critical_request)
 
-		lower_priority_full.refresh_from_db()
-		lower_priority_partial.refresh_from_db()
+		normal_request_1.refresh_from_db()
+		normal_request_2.refresh_from_db()
+		normal_request_3.refresh_from_db()
 		critical_request.refresh_from_db()
 
-		self.assertEqual(critical_request.quantity_allocated, 10)
+		self.assertEqual(critical_request.quantity_allocated, 7)
 		self.assertEqual(critical_request.status, RequestStatus.ALLOCATED)
-		self.assertEqual(lower_priority_full.quantity_allocated, 0)
-		self.assertEqual(lower_priority_full.status, RequestStatus.PENDING)
-		self.assertEqual(lower_priority_partial.quantity_allocated, 2)
-		self.assertEqual(lower_priority_partial.status, RequestStatus.PARTIAL)
+		self.assertEqual(normal_request_1.quantity_allocated, 0)
+		self.assertEqual(normal_request_1.status, RequestStatus.PENDING)
+		self.assertEqual(normal_request_2.quantity_allocated, 0)
+		self.assertEqual(normal_request_2.status, RequestStatus.PENDING)
+		self.assertEqual(normal_request_3.quantity_allocated, 2)
+		self.assertEqual(normal_request_3.status, RequestStatus.PARTIAL)
 
 		critical_history = AllocationHistory.objects.filter(request=critical_request)
-		donor_history = AllocationHistory.objects.filter(request__in=[lower_priority_full, lower_priority_partial])
+		donor_history = AllocationHistory.objects.filter(request__in=[normal_request_1, normal_request_2, normal_request_3])
 
-		self.assertEqual(critical_history.count(), 2)
-		self.assertEqual(donor_history.count(), 2)
+		self.assertEqual(critical_history.count(), 3)
+		self.assertEqual(donor_history.count(), 3)
