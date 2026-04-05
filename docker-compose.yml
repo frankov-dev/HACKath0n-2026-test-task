@@ -1,0 +1,30 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: logistics-backend
+    environment:
+      SEED_DB: "0"
+      SQLITE_PATH: /data/db.sqlite3
+    ports:
+      - "8000:8000"
+    volumes:
+      - sqlite_data:/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: logistics-frontend
+    environment:
+      VITE_API_URL: http://127.0.0.1:8000/api
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:

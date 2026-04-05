@@ -61,6 +61,39 @@ npm run dev
 Клієнтський застосунок за замовчуванням доступний за адресою:
 - `http://127.0.0.1:5173/`.
 
+### 4.3 Запуск через Docker Compose
+
+Вимоги:
+- встановлені Docker Desktop та Docker Compose.
+
+Запуск backend + frontend однією командою (з кореня проєкту):
+
+```powershell
+docker compose up --build
+```
+
+Після запуску сервіси доступні за адресами:
+- Backend: `http://127.0.0.1:8000/`;
+- Frontend: `http://127.0.0.1:5173/`.
+
+За потреби створити демо-дані всередині контейнера backend:
+
+```powershell
+docker compose exec backend python seed_db.py
+```
+
+Або запустити із автоматичним seed під час старту:
+
+```powershell
+docker compose run -e SEED_DB=1 --service-ports backend
+```
+
+Зупинка та видалення контейнерів:
+
+```powershell
+docker compose down
+```
+
 ## 5. Демо-облікові записи
 
 Після виконання `python seed_db.py` створюються тестові користувачі:
