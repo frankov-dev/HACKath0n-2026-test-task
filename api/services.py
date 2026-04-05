@@ -1,5 +1,5 @@
 from django.db import transaction
-from .models import Stock, Request, RequestStatus
+from .models import AllocationHistory, PriorityLevel, Request, Stock
 from .utils import calculate_distance
 
 class LogisticsService:
@@ -13,8 +13,15 @@ class LogisticsService:
             # 1. Спочатку пробуємо знайти вільне на складах
             LogisticsService._allocate_from_free_stocks(request_instance)
 
-            # 2. Оновлюємо фінальний статус
-            request_instance.update_status() 
+            # 2. Якщо запит критичний і все ще не закритий, забираємо ресурс у нижчих пріоритетів.
+            if (
+                request_instance.priority == PriorityLevel.CRITICAL
+                and request_instance.quantity_allocated < request_instance.quantity_requested
+            ):
+                LogisticsService._preempt_low_priority(request_instance)
+
+            # 3. Оновлюємо фінальний статус
+            request_instance.update_status()
             request_instance.save()
 
     @staticmethod
@@ -42,3 +49,51 @@ class LogisticsService:
                 stock.reserved_quantity += can_take
                 stock.save()
                 req.quantity_allocated += can_take
+
+    @staticmethod
+    def _preempt_low_priority(critical_req):
+        """Перерозподіляємо вже виділену кількість від менш пріоритетних заявок."""
+        needed = critical_req.quantity_requested - critical_req.quantity_allocated
+
+        donors = (
+            Request.objects.select_for_update()
+            .filter(
+                resource_type=critical_req.resource_type,
+                priority__lt=PriorityLevel.CRITICAL,
+                quantity_allocated__gt=0,
+            )
+            .order_by('priority', 'created_at')
+        )
+
+        for donor in donors:
+            if needed <= 0:
+                break
+
+            transferred = min(donor.quantity_allocated, needed)
+            if transferred <= 0:
+                continue
+
+            donor_old_quantity = donor.quantity_allocated
+            critical_old_quantity = critical_req.quantity_allocated
+
+            donor.quantity_allocated -= transferred
+            donor.update_status()
+            donor.save()
+
+            critical_req.quantity_allocated += transferred
+            critical_req.update_status()
+
+            AllocationHistory.objects.create(
+                request=donor,
+                old_quantity=donor_old_quantity,
+                new_quantity=donor.quantity_allocated,
+                reason='Перерозподіл ресурсу на користь критичного запиту',
+            )
+            AllocationHistory.objects.create(
+                request=critical_req,
+                old_quantity=critical_old_quantity,
+                new_quantity=critical_req.quantity_allocated,
+                reason='Отримано ресурс шляхом перерозподілу від нижчого пріоритету',
+            )
+
+            needed -= transferred
