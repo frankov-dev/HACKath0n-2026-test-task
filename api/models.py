@@ -15,6 +15,7 @@ class PriorityLevel(models.IntegerChoices):
 
 class RequestStatus(models.TextChoices):
     PENDING = 'PENDING', 'Очікує'
+    PARTIAL = 'PARTIAL', 'Частково розподілено'
     ALLOCATED = 'ALLOCATED', 'Розподілено'
     SHIPPED = 'SHIPPED', 'Відправлено'
     COMPLETED = 'COMPLETED', 'Доставлено'
@@ -88,11 +89,11 @@ class Request(models.Model):
 
     def update_status(self):
         if self.quantity_allocated >= self.quantity_requested:
-            self.status = 'ALLOCATED'
+            self.status = RequestStatus.ALLOCATED
         elif self.quantity_allocated > 0:
-            self.status = 'PARTIAL'
+            self.status = RequestStatus.PARTIAL
         else:
-            self.status = 'PENDING'
+            self.status = RequestStatus.PENDING
 
     class Meta:
         ordering = ['-priority', '-is_urgent', '-created_at']
