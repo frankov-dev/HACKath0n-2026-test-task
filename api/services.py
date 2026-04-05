@@ -27,8 +27,6 @@ class LogisticsService:
                 req.status = RequestStatus.PENDING
                 req.save(update_fields=['quantity_allocated', 'status'])
 
-            ResourceTransaction.objects.filter(resource_type=resource_type).delete()
-
             for req in requests:
                 LogisticsService.process_request(req)
 

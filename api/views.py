@@ -1,8 +1,8 @@
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import DeliveryPoint, Request, Stock, Supplier, Warehouse
-from .serializers import DeliveryPointSerializer, RequestSerializer, SupplierSerializer, WarehouseSerializer
+from .models import DeliveryPoint, Request, ResourceTransaction, Stock, Supplier, Warehouse
+from .serializers import DeliveryPointSerializer, RequestSerializer, ResourceTransactionSerializer, SupplierSerializer, WarehouseSerializer
 from .services import LogisticsService
 from .utils import calculate_distance
 
@@ -69,6 +69,26 @@ class SupplierViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
 
+
+class ResourceTransactionViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = ResourceTransaction.objects.select_related('request', 'request__point').all()
+    serializer_class = ResourceTransactionSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        resource_type = self.request.query_params.get('resource_type')
+        request_id = self.request.query_params.get('request')
+        transaction_type = self.request.query_params.get('transaction_type')
+
+        if resource_type:
+            queryset = queryset.filter(resource_type=resource_type)
+        if request_id:
+            queryset = queryset.filter(request_id=request_id)
+        if transaction_type:
+            queryset = queryset.filter(transaction_type=transaction_type)
+
+        return queryset.order_by('-created_at')
+
 class DeliveryPointViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Endpoint: /api/points/
@@ -98,3 +118,8 @@ class RequestViewSet(viewsets.ModelViewSet):
         LogisticsService.recalculate_resource(updated_request.resource_type)
         if old_resource_type != updated_request.resource_type:
             LogisticsService.recalculate_resource(old_resource_type)
+
+    def perform_destroy(self, instance):
+        resource_type = instance.resource_type
+        instance.delete()
+        LogisticsService.recalculate_resource(resource_type)

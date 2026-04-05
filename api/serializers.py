@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import AllocationHistory, DeliveryPoint, Request, Shipment, Stock, Supplier, Warehouse
+from .models import AllocationHistory, DeliveryPoint, Request, ResourceTransaction, Shipment, Stock, Supplier, Warehouse
 
 # Цей файл необхідний для визначення серіалізаторів, 
 # які перетворюють наші моделі в JSON та навпаки. 
@@ -42,6 +42,35 @@ class RequestSerializer(serializers.ModelSerializer):
         ]
 
         read_only_fields = ['quantity_allocated', 'status', 'created_at']
+
+
+class ResourceTransactionSerializer(serializers.ModelSerializer):
+    resource_type_display = serializers.CharField(source='get_resource_type_display', read_only=True)
+    transaction_type_display = serializers.CharField(source='get_transaction_type_display', read_only=True)
+    request_point = serializers.CharField(source='request.point.name', read_only=True)
+    request_city = serializers.CharField(source='request.point.city', read_only=True)
+    request_priority = serializers.CharField(source='request.get_priority_display', read_only=True)
+    request_status = serializers.CharField(source='request.get_status_display', read_only=True)
+
+    class Meta:
+        model = ResourceTransaction
+        fields = [
+            'id',
+            'request',
+            'request_point',
+            'request_city',
+            'request_priority',
+            'request_status',
+            'resource_type',
+            'resource_type_display',
+            'transaction_type',
+            'transaction_type_display',
+            'quantity',
+            'from_location',
+            'to_location',
+            'note',
+            'created_at',
+        ]
 
 class DeliveryPointSerializer(serializers.ModelSerializer):
     """Відображення точки доставки (магазину) та її запитів."""

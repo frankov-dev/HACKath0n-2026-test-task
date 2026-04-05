@@ -51,7 +51,7 @@ API docs:
 
 ### ResourceTransaction
 
-Detailed movement log for dashboard and audit:
+Detailed movement log for audit:
 
 - `transaction_type`: `ALLOCATION`, `PREEMPT_OUT`, `PREEMPT_IN`, `SHORTAGE`
 - `resource_type`, `quantity`, `from_location`, `to_location`, `note`
