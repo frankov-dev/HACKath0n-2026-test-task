@@ -416,22 +416,22 @@ class ApiCoverageAndRedistributionTests(APITestCase):
 
 	def test_all_roles_can_login_and_access_all_main_api_endpoints(self):
 		roles = [
-			('dispatcher_cov', 'Dispatcher123!', 2),
-			('point_cov', 'PointManager123!', 1),
-			('warehouse_cov', 'WarehouseManager123!', 2),
+			('dispatcher_cov', 'Dispatcher123!', 2, 200, 200, 200, 200),
+			('point_cov', 'PointManager123!', 1, 200, 404, 200, 200),
+			('warehouse_cov', 'WarehouseManager123!', 2, 200, 200, 200, 200),
 		]
 
-		for username, password, expected_requests_count in roles:
+		for username, password, expected_requests_count, expected_warehouse_list, expected_warehouse_detail, expected_supplier_list, expected_point_list in roles:
 			with self.subTest(username=username):
 				self._login_and_set_token(username, password)
 
 				me_response = self.client.get(reverse('auth-me'))
 				self.assertEqual(me_response.status_code, status.HTTP_200_OK)
 
-				self.assertEqual(self.client.get(reverse('warehouse-list')).status_code, status.HTTP_200_OK)
-				self.assertEqual(self.client.get(reverse('warehouse-detail', args=[self.warehouse_kyiv.id])).status_code, status.HTTP_200_OK)
-				self.assertEqual(self.client.get(reverse('supplier-list')).status_code, status.HTTP_200_OK)
-				self.assertEqual(self.client.get(reverse('point-list')).status_code, status.HTTP_200_OK)
+				self.assertEqual(self.client.get(reverse('warehouse-list')).status_code, expected_warehouse_list)
+				self.assertEqual(self.client.get(reverse('warehouse-detail', args=[self.warehouse_kyiv.id])).status_code, expected_warehouse_detail)
+				self.assertEqual(self.client.get(reverse('supplier-list')).status_code, expected_supplier_list)
+				self.assertEqual(self.client.get(reverse('point-list')).status_code, expected_point_list)
 
 				nearest_response = self.client.get(
 					reverse('warehouse-nearest'),

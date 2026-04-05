@@ -8,6 +8,7 @@ from .models import AllocationHistory, DeliveryPoint, Request, ResourceTransacti
 class StockSerializer(serializers.ModelSerializer):
     """Відображення залишків на складі."""
     resource_type_display = serializers.CharField(source='get_resource_type_display', read_only=True)
+    available_quantity = serializers.FloatField(read_only=True)
 
     class Meta:
         model = Stock
@@ -79,3 +80,29 @@ class DeliveryPointSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeliveryPoint
         fields = ['id', 'name', 'city', 'latitude', 'longitude', 'requests']
+
+
+class LoginRequestSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField()
+
+
+class AuthUserSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    username = serializers.CharField()
+    role = serializers.CharField(allow_null=True)
+    delivery_point_id = serializers.IntegerField(allow_null=True)
+    warehouse_id = serializers.IntegerField(allow_null=True)
+
+
+class LoginResponseSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    user = AuthUserSerializer()
+
+
+class MeResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    username = serializers.CharField()
+    role = serializers.CharField(allow_null=True)
+    delivery_point_id = serializers.IntegerField(allow_null=True)
+    warehouse_id = serializers.IntegerField(allow_null=True)

@@ -6,9 +6,19 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema
 
 from .models import DeliveryPoint, EmployeeProfile, Request, ResourceTransaction, Stock, Supplier, Warehouse
-from .serializers import DeliveryPointSerializer, RequestSerializer, ResourceTransactionSerializer, SupplierSerializer, WarehouseSerializer
+from .serializers import (
+    DeliveryPointSerializer,
+    LoginRequestSerializer,
+    LoginResponseSerializer,
+    MeResponseSerializer,
+    RequestSerializer,
+    ResourceTransactionSerializer,
+    SupplierSerializer,
+    WarehouseSerializer,
+)
 from .services import LogisticsService
 from .utils import calculate_distance
 
@@ -17,6 +27,7 @@ class LoginView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
+    @extend_schema(request=LoginRequestSerializer, responses={200: LoginResponseSerializer})
     def post(self, request):
         username = request.data.get('username')
         password = request.data.get('password')
@@ -48,6 +59,7 @@ class LoginView(APIView):
 class MeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(responses={200: MeResponseSerializer})
     def get(self, request):
         profile = getattr(request.user, 'employee_profile', None)
         return Response(
@@ -73,6 +85,22 @@ class WarehouseViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Warehouse.objects.all()
     serializer_class = WarehouseSerializer
 
+    def get_queryset(self):
+        user = self.request.user
+        profile = get_user_profile_or_none(user)
+
+        if user.is_superuser:
+            return Warehouse.objects.all()
+        if profile is None:
+            return Warehouse.objects.none()
+        if profile.role == EmployeeProfile.Role.DISPATCHER:
+            return Warehouse.objects.all()
+        if profile.role == EmployeeProfile.Role.WAREHOUSE_MANAGER:
+            if profile.warehouse_id is None:
+                return Warehouse.objects.none()
+            return Warehouse.objects.filter(id=profile.warehouse_id)
+        return Warehouse.objects.none()
+
     @action(detail=False, methods=['get'], url_path='nearest')
     def nearest(self, request):
         resource_type = request.query_params.get('resource_type')
@@ -94,7 +122,7 @@ class WarehouseViewSet(viewsets.ReadOnlyModelViewSet):
 
         stocks = (
             Stock.objects.select_related('warehouse')
-            .filter(resource_type=resource_type, actual_quantity__gt=0)
+            .filter(resource_type=resource_type, actual_quantity__gt=0, warehouse__in=self.get_queryset())
         )
 
         items = []
@@ -127,6 +155,20 @@ class SupplierViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
 
+    def get_queryset(self):
+        user = self.request.user
+        profile = get_user_profile_or_none(user)
+
+        if user.is_superuser:
+            return Supplier.objects.all()
+        if profile is None:
+            return Supplier.objects.none()
+        if profile.role == EmployeeProfile.Role.DISPATCHER:
+            return Supplier.objects.all()
+        if profile.role == EmployeeProfile.Role.WAREHOUSE_MANAGER and profile.warehouse_id is not None:
+            return Supplier.objects.filter(warehouses__id=profile.warehouse_id).distinct()
+        return Supplier.objects.none()
+
 
 class ResourceTransactionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ResourceTransaction.objects.select_related('request', 'request__point').all()
@@ -154,6 +196,22 @@ class DeliveryPointViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = DeliveryPoint.objects.all()
     serializer_class = DeliveryPointSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        profile = get_user_profile_or_none(user)
+
+        if user.is_superuser:
+            return DeliveryPoint.objects.all()
+        if profile is None:
+            return DeliveryPoint.objects.none()
+        if profile.role == EmployeeProfile.Role.DISPATCHER:
+            return DeliveryPoint.objects.all()
+        if profile.role == EmployeeProfile.Role.DELIVERY_POINT_MANAGER:
+            if profile.delivery_point_id is None:
+                return DeliveryPoint.objects.none()
+            return DeliveryPoint.objects.filter(id=profile.delivery_point_id)
+        return DeliveryPoint.objects.none()
 
 # БЛОК ОПЕРАЦІЙ (Створення та перегляд заявок)
 class RequestViewSet(viewsets.ModelViewSet):

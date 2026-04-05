@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
+from django.db.models import Q
 
 # --- Choices ---
 
@@ -105,6 +106,25 @@ class EmployeeProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.get_role_display()}"
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                name='employee_profile_dispatcher_has_no_bindings',
+                condition=Q(role='DISPATCHER', delivery_point__isnull=True, warehouse__isnull=True)
+                | ~Q(role='DISPATCHER'),
+            ),
+            models.CheckConstraint(
+                name='employee_profile_point_manager_has_delivery_point_only',
+                condition=Q(role='DELIVERY_POINT_MANAGER', delivery_point__isnull=False, warehouse__isnull=True)
+                | ~Q(role='DELIVERY_POINT_MANAGER'),
+            ),
+            models.CheckConstraint(
+                name='employee_profile_warehouse_manager_has_warehouse_only',
+                condition=Q(role='WAREHOUSE_MANAGER', warehouse__isnull=False, delivery_point__isnull=True)
+                | ~Q(role='WAREHOUSE_MANAGER'),
+            ),
+        ]
 
 class Request(models.Model):
     point = models.ForeignKey(DeliveryPoint, on_delete=models.CASCADE, related_name='requests')

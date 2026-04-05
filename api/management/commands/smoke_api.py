@@ -81,6 +81,7 @@ class Command(BaseCommand):
                 and me_resp.data.get("role") == expected_role
             )
             results.append((f"{username} auth-me", me_ok, f"status={me_resp.status_code}"))
+            profile = EmployeeProfile.objects.filter(user__username=username).select_related("delivery_point").first()
 
             checks = [
                 ("warehouse-list", reverse("warehouse-list"), {}),
@@ -108,23 +109,31 @@ class Command(BaseCommand):
 
             if first_warehouse is not None:
                 resp = client.get(reverse("warehouse-detail", args=[first_warehouse.id]))
-                results.append((f"{username} GET warehouse-detail", resp.status_code == 200, f"status={resp.status_code}"))
+                expected_warehouse_detail = 200
+                if profile and profile.role == EmployeeProfile.Role.DELIVERY_POINT_MANAGER:
+                    expected_warehouse_detail = 404
+                if profile and profile.role == EmployeeProfile.Role.WAREHOUSE_MANAGER:
+                    expected_warehouse_detail = 200 if first_warehouse.id == profile.warehouse_id else 404
+                results.append((f"{username} GET warehouse-detail", resp.status_code == expected_warehouse_detail, f"status={resp.status_code}"))
 
             if first_point is not None:
                 resp = client.get(reverse("point-detail", args=[first_point.id]))
-                results.append((f"{username} GET point-detail", resp.status_code == 200, f"status={resp.status_code}"))
+                expected_point_detail = 200
+                if profile and profile.role == EmployeeProfile.Role.DELIVERY_POINT_MANAGER:
+                    expected_point_detail = 200 if first_point.id == profile.delivery_point_id else 404
+                if profile and profile.role == EmployeeProfile.Role.WAREHOUSE_MANAGER:
+                    expected_point_detail = 404
+                results.append((f"{username} GET point-detail", resp.status_code == expected_point_detail, f"status={resp.status_code}"))
 
             if first_request is not None:
                 resp = client.get(reverse("request-detail", args=[first_request.id]))
                 expected_ok = resp.status_code == 200
-                profile = EmployeeProfile.objects.filter(user__username=username).select_related("delivery_point").first()
                 if profile and profile.role == EmployeeProfile.Role.DELIVERY_POINT_MANAGER:
                     expected_ok = (resp.status_code == 200) == (first_request.point_id == profile.delivery_point_id)
                 results.append((f"{username} GET request-detail role-scope", expected_ok, f"status={resp.status_code}"))
 
             list_resp = client.get(reverse("request-list"))
             expected_count = Request.objects.count()
-            profile = EmployeeProfile.objects.filter(user__username=username).select_related("delivery_point").first()
             if profile and profile.role == EmployeeProfile.Role.DELIVERY_POINT_MANAGER:
                 expected_count = Request.objects.filter(point_id=profile.delivery_point_id).count()
             count_ok = list_resp.status_code == 200 and len(list_resp.data) == expected_count
