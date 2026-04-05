@@ -1,8 +1,13 @@
+from django.contrib.auth.models import User
+from django.urls import reverse
 from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 from .models import (
 	AllocationHistory,
 	DeliveryPoint,
+	EmployeeProfile,
 	PriorityLevel,
 	Request,
 	RequestStatus,
@@ -225,3 +230,93 @@ class LogisticsServiceTests(TestCase):
 				transaction_type=TransactionType.SHORTAGE,
 			).exists()
 		)
+
+
+class AuthAndRBACApiTests(APITestCase):
+	def setUp(self):
+		self.point_kyiv = DeliveryPoint.objects.create(
+			name='АЗС Київ',
+			city='Київ',
+			latitude=50.45,
+			longitude=30.52,
+		)
+		self.point_lviv = DeliveryPoint.objects.create(
+			name='АЗС Львів',
+			city='Львів',
+			latitude=49.84,
+			longitude=24.03,
+		)
+
+		warehouse = Warehouse.objects.create(
+			name='Київський хаб',
+			city='Київ',
+			latitude=50.45,
+			longitude=30.52,
+		)
+		Stock.objects.create(
+			warehouse=warehouse,
+			resource_type=ResourceType.FUEL,
+			actual_quantity=100,
+			reserved_quantity=0,
+		)
+
+		self.dispatcher = User.objects.create_user(username='dispatcher_test', password='Dispatcher123!')
+		EmployeeProfile.objects.create(user=self.dispatcher, role=EmployeeProfile.Role.DISPATCHER)
+
+		self.point_manager = User.objects.create_user(username='point_manager_test', password='PointManager123!')
+		EmployeeProfile.objects.create(
+			user=self.point_manager,
+			role=EmployeeProfile.Role.DELIVERY_POINT_MANAGER,
+			delivery_point=self.point_kyiv,
+		)
+
+		self.req_kyiv = Request.objects.create(
+			point=self.point_kyiv,
+			resource_type=ResourceType.FUEL,
+			quantity_requested=10,
+			priority=PriorityLevel.NORMAL,
+		)
+		self.req_lviv = Request.objects.create(
+			point=self.point_lviv,
+			resource_type=ResourceType.FUEL,
+			quantity_requested=10,
+			priority=PriorityLevel.NORMAL,
+		)
+
+	def test_login_returns_token(self):
+		response = self.client.post(
+			reverse('auth-login'),
+			{'username': 'dispatcher_test', 'password': 'Dispatcher123!'},
+			format='json',
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertIn('token', response.data)
+
+	def test_requests_endpoint_requires_token(self):
+		response = self.client.get(reverse('request-list'))
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+	def test_point_manager_sees_only_own_point_requests(self):
+		self.client.force_authenticate(user=self.point_manager)
+		response = self.client.get(reverse('request-list'))
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data), 1)
+		self.assertEqual(response.data[0]['point'], self.point_kyiv.id)
+
+	def test_point_manager_create_request_auto_binds_own_point(self):
+		self.client.force_authenticate(user=self.point_manager)
+		response = self.client.post(
+			reverse('request-list'),
+			{
+				'point': self.point_lviv.id,
+				'resource_type': ResourceType.FUEL,
+				'quantity_requested': 5,
+				'priority': PriorityLevel.HIGH,
+				'is_urgent': False,
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+		created = Request.objects.get(id=response.data['id'])
+		self.assertEqual(created.point_id, self.point_kyiv.id)

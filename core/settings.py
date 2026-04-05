@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     
     # Custom apps
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
     'api', # Твій додаток
     'drf_spectacular', # Для документації
@@ -127,4 +128,10 @@ CORS_ALLOW_ALL_ORIGINS = True # Only for development, be careful with this in pr
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
 }

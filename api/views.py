@@ -1,10 +1,68 @@
-from rest_framework import status, viewsets
+from django.contrib.auth import authenticate
+from rest_framework import permissions, status, viewsets
+from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from .models import DeliveryPoint, Request, ResourceTransaction, Stock, Supplier, Warehouse
+from rest_framework.views import APIView
+
+from .models import DeliveryPoint, EmployeeProfile, Request, ResourceTransaction, Stock, Supplier, Warehouse
 from .serializers import DeliveryPointSerializer, RequestSerializer, ResourceTransactionSerializer, SupplierSerializer, WarehouseSerializer
 from .services import LogisticsService
 from .utils import calculate_distance
+
+
+class LoginView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        username = request.data.get('username')
+        password = request.data.get('password')
+
+        if not username or not password:
+            raise ValidationError({'detail': 'Потрібні username і password'})
+
+        user = authenticate(request, username=username, password=password)
+        if user is None:
+            raise ValidationError({'detail': 'Невірний логін або пароль'})
+
+        token, _ = Token.objects.get_or_create(user=user)
+        profile = getattr(user, 'employee_profile', None)
+
+        return Response(
+            {
+                'token': token.key,
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'role': profile.role if profile else None,
+                    'delivery_point_id': profile.delivery_point_id if profile else None,
+                    'warehouse_id': profile.warehouse_id if profile else None,
+                },
+            }
+        )
+
+
+class MeView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        profile = getattr(request.user, 'employee_profile', None)
+        return Response(
+            {
+                'id': request.user.id,
+                'username': request.user.username,
+                'role': profile.role if profile else None,
+                'delivery_point_id': profile.delivery_point_id if profile else None,
+                'warehouse_id': profile.warehouse_id if profile else None,
+            }
+        )
+
+
+def get_user_profile_or_none(user):
+    return getattr(user, 'employee_profile', None)
 
 # БЛОК КАТАЛОГУ (Тільки перегляд)
 class WarehouseViewSet(viewsets.ReadOnlyModelViewSet):
@@ -104,16 +162,54 @@ class RequestViewSet(viewsets.ModelViewSet):
     GET: побачити статус усіх заявок (хто що просив і чи отримав).
     POST: надіслати нову заявку на паливо/товари.
     """
-    queryset = Request.objects.all()
+    queryset = Request.objects.select_related('point').all()
     serializer_class = RequestSerializer
 
+    def get_queryset(self):
+        user = self.request.user
+        profile = get_user_profile_or_none(user)
+
+        if user.is_superuser:
+            return self.queryset
+
+        if profile is None:
+            return Request.objects.none()
+
+        if profile.role == EmployeeProfile.Role.DISPATCHER:
+            return self.queryset
+
+        if profile.role == EmployeeProfile.Role.DELIVERY_POINT_MANAGER:
+            if profile.delivery_point_id is None:
+                return Request.objects.none()
+            return self.queryset.filter(point_id=profile.delivery_point_id)
+
+        if profile.role == EmployeeProfile.Role.WAREHOUSE_MANAGER:
+            return self.queryset
+
+        return Request.objects.none()
+
     def perform_create(self, serializer):
-        new_request = serializer.save()
+        profile = get_user_profile_or_none(self.request.user)
+
+        if profile and profile.role == EmployeeProfile.Role.DELIVERY_POINT_MANAGER:
+            if profile.delivery_point_id is None:
+                raise PermissionDenied('Менеджер точки не прив’язаний до жодної точки доставки')
+            new_request = serializer.save(point_id=profile.delivery_point_id)
+        else:
+            new_request = serializer.save()
+
         LogisticsService.recalculate_resource(new_request.resource_type)
 
     def perform_update(self, serializer):
+        profile = get_user_profile_or_none(self.request.user)
         old_resource_type = serializer.instance.resource_type
-        updated_request = serializer.save()
+
+        if profile and profile.role == EmployeeProfile.Role.DELIVERY_POINT_MANAGER:
+            if profile.delivery_point_id is None:
+                raise PermissionDenied('Менеджер точки не прив’язаний до жодної точки доставки')
+            updated_request = serializer.save(point_id=profile.delivery_point_id)
+        else:
+            updated_request = serializer.save()
 
         LogisticsService.recalculate_resource(updated_request.resource_type)
         if old_resource_type != updated_request.resource_type:

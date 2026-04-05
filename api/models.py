@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
 
 # --- Choices ---
@@ -77,6 +78,33 @@ class Stock(models.Model):
 class DeliveryPoint(BaseLocation):
     def __str__(self):
         return f"Точка: {self.name} ({self.city})"
+
+
+class EmployeeProfile(models.Model):
+    class Role(models.TextChoices):
+        DISPATCHER = 'DISPATCHER', 'Диспетчер (Адмін)'
+        DELIVERY_POINT_MANAGER = 'DELIVERY_POINT_MANAGER', 'Менеджер точки доставки'
+        WAREHOUSE_MANAGER = 'WAREHOUSE_MANAGER', 'Менеджер складу'
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='employee_profile')
+    role = models.CharField(max_length=32, choices=Role.choices, db_index=True)
+    delivery_point = models.ForeignKey(
+        'DeliveryPoint',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='managers',
+    )
+    warehouse = models.ForeignKey(
+        'Warehouse',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='managers',
+    )
+
+    def __str__(self):
+        return f"{self.user.username} - {self.get_role_display()}"
 
 class Request(models.Model):
     point = models.ForeignKey(DeliveryPoint, on_delete=models.CASCADE, related_name='requests')
