@@ -3,7 +3,10 @@ from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import OperationalError
+from django.db import transaction
+from django.db.models import F
 from django.urls import reverse
+from uuid import uuid4
 from rest_framework.test import APIClient
 
 from api.models import DeliveryPoint, EmployeeProfile, Request, ResourceType, Stock, Supplier, Warehouse
@@ -277,71 +280,94 @@ class Command(BaseCommand):
             profile.save(update_fields=updated_fields)
 
     def _check_critical_redistribution(self):
-        # Isolated scenario with unique resource type SUPPLIES to avoid conflicting with existing requests.
-        kyiv_point = DeliveryPoint.objects.filter(city="Київ").first() or DeliveryPoint.objects.first()
-        lviv_point = DeliveryPoint.objects.filter(city="Львів").first() or DeliveryPoint.objects.last()
-        warehouse = Warehouse.objects.first()
+        # Run in a transaction and rollback everything to avoid mutating real data.
+        with transaction.atomic():
+            # Isolate scenario from existing SUPPLIES records in the same DB.
+            Stock.objects.filter(resource_type="SUPPLIES").update(reserved_quantity=F("actual_quantity"))
+            Request.objects.filter(resource_type="SUPPLIES").update(quantity_allocated=0.0, status="PENDING")
 
-        if kyiv_point is None or lviv_point is None or warehouse is None:
-            return False, "missing base data for redistribution scenario"
+            suffix = uuid4().hex[:8]
+            supplier = Supplier.objects.create(
+                name=f"SMOKE_TMP_SUPPLIER_{suffix}",
+                city="Київ",
+                latitude=50.45,
+                longitude=30.52,
+            )
+            warehouse = Warehouse.objects.create(
+                name=f"SMOKE_TMP_WAREHOUSE_{suffix}",
+                city="Київ",
+                latitude=50.45,
+                longitude=30.52,
+                supplier=supplier,
+            )
+            Stock.objects.create(
+                warehouse=warehouse,
+                resource_type="SUPPLIES",
+                actual_quantity=9.0,
+                reserved_quantity=0.0,
+            )
 
-        stock, _ = warehouse.stocks.get_or_create(
-            resource_type="SUPPLIES",
-            defaults={"actual_quantity": 9.0, "reserved_quantity": 0.0},
-        )
-        stock.actual_quantity = 9.0
-        stock.reserved_quantity = 0.0
-        stock.save(update_fields=["actual_quantity", "reserved_quantity"])
+            kyiv_point = DeliveryPoint.objects.create(
+                name=f"SMOKE_TMP_POINT_KYIV_{suffix}",
+                city="Київ",
+                latitude=50.40,
+                longitude=30.60,
+            )
+            lviv_point = DeliveryPoint.objects.create(
+                name=f"SMOKE_TMP_POINT_LVIV_{suffix}",
+                city="Львів",
+                latitude=49.83,
+                longitude=24.01,
+            )
 
-        for old in Request.objects.filter(resource_type="SUPPLIES"):
-            old.delete()
+            normal_1 = Request.objects.create(
+                point=kyiv_point,
+                resource_type="SUPPLIES",
+                quantity_requested=3,
+                priority=1,
+            )
+            normal_2 = Request.objects.create(
+                point=kyiv_point,
+                resource_type="SUPPLIES",
+                quantity_requested=3,
+                priority=1,
+            )
+            normal_3 = Request.objects.create(
+                point=kyiv_point,
+                resource_type="SUPPLIES",
+                quantity_requested=3,
+                priority=1,
+            )
+            critical = Request.objects.create(
+                point=lviv_point,
+                resource_type="SUPPLIES",
+                quantity_requested=7,
+                priority=3,
+            )
 
-        normal_1 = Request.objects.create(
-            point=kyiv_point,
-            resource_type="SUPPLIES",
-            quantity_requested=3,
-            priority=1,
-        )
-        normal_2 = Request.objects.create(
-            point=kyiv_point,
-            resource_type="SUPPLIES",
-            quantity_requested=3,
-            priority=1,
-        )
-        normal_3 = Request.objects.create(
-            point=kyiv_point,
-            resource_type="SUPPLIES",
-            quantity_requested=3,
-            priority=1,
-        )
-        critical = Request.objects.create(
-            point=lviv_point,
-            resource_type="SUPPLIES",
-            quantity_requested=7,
-            priority=3,
-        )
+            from api.services import LogisticsService
 
-        from api.services import LogisticsService
+            LogisticsService.process_request(normal_1)
+            LogisticsService.process_request(normal_2)
+            LogisticsService.process_request(normal_3)
+            LogisticsService.process_request(critical)
 
-        LogisticsService.process_request(normal_1)
-        LogisticsService.process_request(normal_2)
-        LogisticsService.process_request(normal_3)
-        LogisticsService.process_request(critical)
+            normal_1.refresh_from_db()
+            normal_2.refresh_from_db()
+            normal_3.refresh_from_db()
+            critical.refresh_from_db()
 
-        normal_1.refresh_from_db()
-        normal_2.refresh_from_db()
-        normal_3.refresh_from_db()
-        critical.refresh_from_db()
+            ok = (
+                critical.quantity_allocated == 7
+                and critical.status == "ALLOCATED"
+                and normal_1.quantity_allocated == 0
+                and normal_2.quantity_allocated == 0
+                and normal_3.quantity_allocated == 2
+            )
+            detail = (
+                f"critical={critical.quantity_allocated}/{critical.quantity_requested}, "
+                f"donors=({normal_1.quantity_allocated}, {normal_2.quantity_allocated}, {normal_3.quantity_allocated})"
+            )
 
-        ok = (
-            critical.quantity_allocated == 7
-            and critical.status == "ALLOCATED"
-            and normal_1.quantity_allocated == 0
-            and normal_2.quantity_allocated == 0
-            and normal_3.quantity_allocated == 2
-        )
-        detail = (
-            f"critical={critical.quantity_allocated}/{critical.quantity_requested}, "
-            f"donors=({normal_1.quantity_allocated}, {normal_2.quantity_allocated}, {normal_3.quantity_allocated})"
-        )
-        return ok, detail
+            transaction.set_rollback(True)
+            return ok, detail
