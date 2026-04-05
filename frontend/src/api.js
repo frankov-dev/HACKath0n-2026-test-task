@@ -23,7 +23,10 @@ export const api = {
   login: (username, password) => request('/auth/login/', { method: 'POST', body: JSON.stringify({ username, password }) }),
   getMe: () => request('/auth/me/'),
   getRequests: () => request('/requests/'),
-  getPoints: () => request('/points/'), // Отримуємо список точок
+  getPoints: () => request('/points/'),
+  getTransactions: () => request('/transactions/'), // НОВЕ: Транзакції (Маршрути)
+  getWarehouses: () => request('/warehouses/'),     // НОВЕ: Склади
+  getSuppliers: () => request('/suppliers/'),       // НОВЕ: Постачальники
   createRequest: (data) => request('/requests/', { method: 'POST', body: JSON.stringify(data) }),
   getNearestWarehouses: (lat, lng, resourceType) => 
     request(`/warehouses/nearest/?resource_type=${resourceType}&latitude=${lat}&longitude=${lng}&limit=5`),
