@@ -1,8 +1,37 @@
 from django.db import transaction
-from .models import AllocationHistory, PriorityLevel, Request, ResourceTransaction, Stock, TransactionType
+from .models import AllocationHistory, PriorityLevel, Request, RequestStatus, ResourceTransaction, Stock, TransactionType
 from .utils import calculate_distance
 
 class LogisticsService:
+    @staticmethod
+    def recalculate_resource(resource_type):
+        """Повний перерахунок алокацій для конкретного ресурсу (urgent-first)."""
+        with transaction.atomic():
+            stocks = (
+                Stock.objects.select_for_update()
+                .filter(resource_type=resource_type)
+            )
+            for stock in stocks:
+                stock.reserved_quantity = 0.0
+                stock.save(update_fields=['reserved_quantity'])
+
+            requests = list(
+                Request.objects.select_for_update()
+                .filter(resource_type=resource_type)
+                .exclude(status=RequestStatus.CANCELLED)
+                .order_by('-is_urgent', '-priority', 'created_at', 'id')
+            )
+
+            for req in requests:
+                req.quantity_allocated = 0.0
+                req.status = RequestStatus.PENDING
+                req.save(update_fields=['quantity_allocated', 'status'])
+
+            ResourceTransaction.objects.filter(resource_type=resource_type).delete()
+
+            for req in requests:
+                LogisticsService.process_request(req)
+
     @staticmethod
     def process_request(request_instance):
         """Головний конвеєр обробки запиту."""

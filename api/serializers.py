@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Warehouse, Stock, DeliveryPoint, Request, Shipment, AllocationHistory
+from .models import AllocationHistory, DeliveryPoint, Request, Shipment, Stock, Supplier, Warehouse
 
 # Цей файл необхідний для визначення серіалізаторів, 
 # які перетворюють наші моделі в JSON та навпаки. 
@@ -13,13 +13,20 @@ class StockSerializer(serializers.ModelSerializer):
         model = Stock
         fields = ['id', 'resource_type', 'resource_type_display', 'actual_quantity', 'reserved_quantity', 'available_quantity']
 
+
+class SupplierSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Supplier
+        fields = ['id', 'name', 'city', 'latitude', 'longitude']
+
 class WarehouseSerializer(serializers.ModelSerializer):
     """Відображення складу разом із його запасами (вкладені дані)."""
     stocks = StockSerializer(many=True, read_only=True)
+    supplier = SupplierSerializer(read_only=True)
 
     class Meta:
         model = Warehouse
-        fields = ['id', 'name', 'city', 'latitude', 'longitude', 'stocks']
+        fields = ['id', 'name', 'city', 'latitude', 'longitude', 'supplier', 'stocks']
 
 class RequestSerializer(serializers.ModelSerializer):
     """Серіалізатор для запитів на ресурси."""

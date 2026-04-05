@@ -33,7 +33,6 @@ class TransactionType(models.TextChoices):
 class BaseLocation(models.Model):
     name = models.CharField(max_length=255, verbose_name="Назва об'єкта")
     city = models.CharField(max_length=100, db_index=True, verbose_name="Місто")
-    # Додали дефолт 0.0, щоб Django не панікував
     latitude = models.FloatField(default=0.0, verbose_name="Широта")
     longitude = models.FloatField(default=0.0, verbose_name="Довгота")
 
@@ -42,13 +41,20 @@ class BaseLocation(models.Model):
 
 # --- Entities ---
 
+
+class Supplier(BaseLocation):
+    def __str__(self):
+        return f"Постачальник: {self.name} ({self.city})"
+
 class Warehouse(BaseLocation):
+    supplier = models.ForeignKey('Supplier', on_delete=models.SET_NULL, null=True, blank=True, related_name='warehouses')
+
     def __str__(self):
         return f"Склад: {self.name} ({self.city})"
 
 class Stock(models.Model):
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='stocks')
-    resource_type = models.CharField(max_length=20, choices=ResourceType.choices)
+    resource_type = models.CharField(max_length=20, choices=ResourceType.choices, db_index=True)
     
     actual_quantity = models.FloatField(
         default=0.0,
@@ -74,7 +80,7 @@ class DeliveryPoint(BaseLocation):
 
 class Request(models.Model):
     point = models.ForeignKey(DeliveryPoint, on_delete=models.CASCADE, related_name='requests')
-    resource_type = models.CharField(max_length=20, choices=ResourceType.choices)
+    resource_type = models.CharField(max_length=20, choices=ResourceType.choices, db_index=True)
     
     quantity_requested = models.FloatField(default=0.0, validators=[MinValueValidator(0.0)])
     quantity_allocated = models.FloatField(default=0.0)
@@ -123,8 +129,8 @@ class Shipment(models.Model):
 
 class ResourceTransaction(models.Model):
     request = models.ForeignKey(Request, on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions')
-    resource_type = models.CharField(max_length=20, choices=ResourceType.choices)
-    transaction_type = models.CharField(max_length=20, choices=TransactionType.choices)
+    resource_type = models.CharField(max_length=20, choices=ResourceType.choices, db_index=True)
+    transaction_type = models.CharField(max_length=20, choices=TransactionType.choices, db_index=True)
     quantity = models.FloatField(default=0.0, validators=[MinValueValidator(0.0)])
     from_location = models.CharField(max_length=255, blank=True, default='')
     to_location = models.CharField(max_length=255, blank=True, default='')

@@ -7,6 +7,8 @@ from .models import (
 	Request,
 	RequestStatus,
 	ResourceType,
+	TransactionType,
+	ResourceTransaction,
 	Stock,
 	Warehouse,
 )
@@ -147,3 +149,79 @@ class LogisticsServiceTests(TestCase):
 
 		self.assertEqual(critical_history.count(), 3)
 		self.assertEqual(donor_history.count(), 3)
+
+	def test_recalculate_resource_prioritizes_urgent_requests(self):
+		Stock.objects.create(
+			warehouse=self.near_warehouse,
+			resource_type=ResourceType.GOODS,
+			actual_quantity=6,
+			reserved_quantity=0,
+		)
+
+		normal_request = Request.objects.create(
+			point=self.point,
+			resource_type=ResourceType.GOODS,
+			quantity_requested=6,
+			priority=PriorityLevel.HIGH,
+			is_urgent=False,
+		)
+		urgent_request = Request.objects.create(
+			point=self.point,
+			resource_type=ResourceType.GOODS,
+			quantity_requested=6,
+			priority=PriorityLevel.HIGH,
+			is_urgent=True,
+		)
+
+		LogisticsService.recalculate_resource(ResourceType.GOODS)
+
+		normal_request.refresh_from_db()
+		urgent_request.refresh_from_db()
+
+		self.assertEqual(urgent_request.quantity_allocated, 6)
+		self.assertEqual(urgent_request.status, RequestStatus.ALLOCATED)
+		self.assertEqual(normal_request.quantity_allocated, 0)
+		self.assertEqual(normal_request.status, RequestStatus.PENDING)
+
+	def test_recalculate_resource_updates_allocation_when_demand_changes(self):
+		Stock.objects.create(
+			warehouse=self.near_warehouse,
+			resource_type=ResourceType.FUEL,
+			actual_quantity=10,
+			reserved_quantity=0,
+		)
+
+		request_a = Request.objects.create(
+			point=self.point,
+			resource_type=ResourceType.FUEL,
+			quantity_requested=5,
+			priority=PriorityLevel.HIGH,
+		)
+		request_b = Request.objects.create(
+			point=self.point,
+			resource_type=ResourceType.FUEL,
+			quantity_requested=5,
+			priority=PriorityLevel.NORMAL,
+		)
+
+		LogisticsService.recalculate_resource(ResourceType.FUEL)
+
+		request_a.quantity_requested = 8
+		request_a.save(update_fields=['quantity_requested'])
+
+		LogisticsService.recalculate_resource(ResourceType.FUEL)
+
+		request_a.refresh_from_db()
+		request_b.refresh_from_db()
+
+		self.assertEqual(request_a.quantity_allocated, 8)
+		self.assertEqual(request_b.quantity_allocated, 2)
+		self.assertEqual(request_a.status, RequestStatus.ALLOCATED)
+		self.assertEqual(request_b.status, RequestStatus.PARTIAL)
+
+		self.assertTrue(
+			ResourceTransaction.objects.filter(
+				request=request_b,
+				transaction_type=TransactionType.SHORTAGE,
+			).exists()
+		)

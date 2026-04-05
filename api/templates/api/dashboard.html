@@ -105,6 +105,7 @@
           <thead>
             <tr>
               <th>Склад</th>
+              <th>Постачальник</th>
               <th>Місто</th>
               <th>Ресурс</th>
               <th>Фактично</th>
@@ -116,6 +117,7 @@
             {% for row in warehouse_rows %}
               <tr>
                 <td>{{ row.warehouse_name }}</td>
+                <td>{{ row.supplier_name }}</td>
                 <td>{{ row.city }}</td>
                 <td>{{ row.resource_type }}</td>
                 <td>{{ row.actual }}</td>
@@ -123,7 +125,7 @@
                 <td>{{ row.available }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="6" class="muted">Дані складів відсутні</td></tr>
+              <tr><td colspan="7" class="muted">Дані складів відсутні</td></tr>
             {% endfor %}
           </tbody>
         </table>
