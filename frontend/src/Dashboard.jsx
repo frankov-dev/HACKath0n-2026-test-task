@@ -7,13 +7,24 @@ import {
 
 export default function Dashboard({ user, onLogout }) {
   const [requests, setRequests] = useState([]);
+  const [points, setPoints] = useState([]); // Стан для точок
   const [loading, setLoading] = useState(true);
-  const [newReq, setNewReq] = useState({ resource_type: 'FUEL', quantity_requested: '', priority: 1, is_urgent: false });
+  const [newReq, setNewReq] = useState({ point: '', resource_type: 'FUEL', quantity_requested: '', priority: 1, is_urgent: false });
 
-  const fetchRequests = async () => {
+  const fetchData = async () => {
     try {
-      const data = await api.getRequests();
-      setRequests(data);
+      // Завантажуємо і заявки, і точки одночасно
+      const [reqData, ptsData] = await Promise.all([
+        api.getRequests(),
+        api.getPoints()
+      ]);
+      setRequests(reqData);
+      setPoints(ptsData);
+      
+      // Якщо точки є, ставимо першу по замовчуванню
+      if (ptsData.length > 0) {
+        setNewReq(prev => ({ ...prev, point: ptsData[0].id }));
+      }
     } catch (error) {
       console.error("Помилка", error);
     } finally {
@@ -21,26 +32,26 @@ export default function Dashboard({ user, onLogout }) {
     }
   };
 
-  useEffect(() => { fetchRequests(); }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const handleCreateRequest = async (e) => {
     e.preventDefault();
     if (newReq.quantity_requested <= 0) return alert("Кількість має бути більшою за нуль!");
+    if (!newReq.point) return alert("Оберіть точку доставки!");
+
     try {
       await api.createRequest(newReq);
-      fetchRequests();
-      setNewReq({ ...newReq, quantity_requested: '', is_urgent: false });
+      fetchData(); // Оновлюємо дані з бази
+      setNewReq(prev => ({ ...prev, quantity_requested: '', is_urgent: false })); // Очищаємо форму
     } catch (err) {
       alert('Помилка при створенні заявки.');
     }
   };
 
-  // Рахуємо статистику для красивих віджетів
   const totalRequests = requests.length;
   const criticalRequests = requests.filter(r => r.priority === 3 || r.is_urgent).length;
   const allocatedRequests = requests.filter(r => r.status === 'ALLOCATED').length;
 
-  // Допоміжні функції для дизайну
   const getResourceIcon = (type) => {
     if (type === 'FUEL') return <Droplet className="w-5 h-5 text-blue-500" />;
     if (type === 'GOODS') return <Package className="w-5 h-5 text-amber-500" />;
@@ -49,7 +60,6 @@ export default function Dashboard({ user, onLogout }) {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
-      {/* Верхня панель (Навігація) */}
       <header className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center sticky top-0 z-50 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="bg-blue-600 p-2 rounded-lg">
@@ -76,7 +86,6 @@ export default function Dashboard({ user, onLogout }) {
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
         
-        {/* Віджети статистики */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex items-center gap-4">
             <div className="bg-blue-50 p-4 rounded-xl text-blue-600"><BarChart3 className="w-8 h-8" /></div>
@@ -101,15 +110,26 @@ export default function Dashboard({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Форма створення запиту */}
         {user.role !== 'WAREHOUSE_MANAGER' && (
           <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="bg-blue-50/50 border-b border-slate-100 px-6 py-4 flex items-center gap-2">
               <Zap className="w-5 h-5 text-blue-600" />
               <h2 className="text-lg font-bold text-slate-800">Нова заявка на постачання</h2>
             </div>
-            <form onSubmit={handleCreateRequest} className="p-6 flex flex-col md:flex-row gap-5 items-end">
-              <div className="flex-1 w-full">
+            {/* Додали flex-wrap, щоб поля не злипались */}
+            <form onSubmit={handleCreateRequest} className="p-6 flex flex-col md:flex-row flex-wrap gap-5 items-end">
+              
+              {/* НОВЕ ПОЛЕ: Вибір точки */}
+              <div className="flex-1 min-w-[150px]">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Об'єкт (Точка)</label>
+                <select className="w-full bg-slate-50 border border-slate-200 text-slate-700 py-3 px-4 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition" value={newReq.point || ''} onChange={e => setNewReq({...newReq, point: parseInt(e.target.value)})}>
+                  {points.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex-1 min-w-[150px]">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Тип ресурсу</label>
                 <select className="w-full bg-slate-50 border border-slate-200 text-slate-700 py-3 px-4 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition" value={newReq.resource_type} onChange={e => setNewReq({...newReq, resource_type: e.target.value})}>
                   <option value="FUEL">⛽ Паливо</option>
@@ -117,11 +137,11 @@ export default function Dashboard({ user, onLogout }) {
                   <option value="SUPPLIES">🔧 Витратні матеріали</option>
                 </select>
               </div>
-              <div className="flex-1 w-full">
+              <div className="flex-1 min-w-[100px]">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Кількість</label>
-                <input type="number" min="1" placeholder="Напр. 100" className="w-full bg-slate-50 border border-slate-200 text-slate-700 py-3 px-4 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition" value={newReq.quantity_requested} onChange={e => setNewReq({...newReq, quantity_requested: parseFloat(e.target.value)})} />
+                <input type="number" min="1" placeholder="Напр. 10" className="w-full bg-slate-50 border border-slate-200 text-slate-700 py-3 px-4 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition" value={newReq.quantity_requested} onChange={e => setNewReq({...newReq, quantity_requested: parseFloat(e.target.value)})} />
               </div>
-              <div className="flex-1 w-full">
+              <div className="flex-1 min-w-[150px]">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Пріоритет</label>
                 <select className="w-full bg-slate-50 border border-slate-200 text-slate-700 py-3 px-4 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition" value={newReq.priority} onChange={e => setNewReq({...newReq, priority: parseInt(e.target.value)})}>
                   <option value={1}>🟢 Нормальний</option>
@@ -137,14 +157,13 @@ export default function Dashboard({ user, onLogout }) {
                 <span className={`text-sm font-bold ${newReq.is_urgent ? 'text-red-700' : 'text-slate-600'}`}>ТЕРМІНОВО</span>
               </div>
 
-              <button type="submit" className="bg-blue-600 text-white px-8 py-3 rounded-xl hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-600/30 font-bold transition-all">
+              <button type="submit" className="bg-blue-600 text-white px-8 py-3 rounded-xl hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-600/30 font-bold transition-all whitespace-nowrap">
                 Створити
               </button>
             </form>
           </section>
         )}
 
-        {/* Таблиця заявок */}
         <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
             <h2 className="text-lg font-bold text-slate-800">Журнал перерозподілу</h2>
